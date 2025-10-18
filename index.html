@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SousSpeed - Sous Vide Optimization for Professional Chefs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <h2>SousSpeed</h2>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="#features" class="nav-link">Features</a>
+                </li>
+                <li class="nav-item">
+                    <a href="#calculator" class="nav-link">Calculator</a>
+                </li>
+                <li class="nav-item">
+                    <a href="#pricing" class="nav-link">Pricing</a>
+                </li>
+                <li class="nav-item">
+                    <a href="#contact" class="nav-link">Contact</a>
+                </li>
+            </ul>
+            <div class="nav-toggle" id="mobile-menu">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <h1 class="hero-title">Perfect Sous Vide Every Time</h1>
+                <p class="hero-subtitle">Professional-grade optimization tools for chefs who demand precision. Calculate perfect time and temperature combinations for any ingredient.</p>
+                <div class="hero-buttons">
+                    <button class="btn btn-primary" onclick="scrollToCalculator()">Try Calculator</button>
+                    <button class="btn btn-secondary">Learn More</button>
+                </div>
+            </div>
+            <div class="hero-image">
+                <div class="sous-vide-animation">
+                    <div class="water-container">
+                        <div class="water-bubbles"></div>
+                        <div class="food-item"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Why Professional Chefs Choose SousSpeed</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-thermometer-half"></i>
+                    </div>
+                    <h3>Precision Temperature Control</h3>
+                    <p>Calculate exact temperatures for any protein, vegetable, or fruit with scientific accuracy.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h3>Optimized Timing</h3>
+                    <p>Never overcook again. Get precise timing recommendations based on thickness and desired doneness.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h3>Recipe Analytics</h3>
+                    <p>Track your cooking results and improve consistency across your kitchen operations.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-mobile-alt"></i>
+                    </div>
+                    <h3>Mobile Ready</h3>
+                    <p>Access your calculations from anywhere in the kitchen with our responsive mobile interface.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Calculator Preview -->
+    <section id="calculator" class="calculator-section">
+        <div class="container">
+            <h2 class="section-title">Interactive Sous Vide Calculator</h2>
+            <div class="calculator-container">
+                <div class="calculator-form">
+                    <div class="form-group">
+                        <label for="protein-type">Protein Type</label>
+                        <select id="protein-type" onchange="updateCalculation()">
+                            <option value="beef">Beef (Free Forever)</option>
+                            <option value="chicken">Chicken (Pro Chef - $10/year)</option>
+                            <option value="pork">Pork (Pro Chef - $10/year)</option>
+                            <option value="fish">Fish (Pro Chef - $10/year)</option>
+                            <option value="vegetables">Vegetables (Pro Chef - $10/year)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="thickness">Thickness (inches)</label>
+                        <input type="number" id="thickness" min="0.5" max="6" step="0.1" value="1" onchange="updateCalculation()">
+                    </div>
+                    <div class="form-group">
+                        <label for="doneness">Doneness Level</label>
+                        <select id="doneness" onchange="updateCalculation()">
+                            <option value="rare">Rare</option>
+                            <option value="medium-rare">Medium Rare</option>
+                            <option value="medium">Medium</option>
+                            <option value="medium-well">Medium Well</option>
+                            <option value="well-done">Well Done</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="calculation-results">
+                    <div class="result-card">
+                        <h3>Recommended Settings</h3>
+                        <div class="result-item">
+                            <span class="result-label">Temperature:</span>
+                            <span class="result-value" id="temp-result">129°F (54°C)</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Time:</span>
+                            <span class="result-value" id="time-result">2.5 hours</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">Texture:</span>
+                            <span class="result-value" id="texture-result">Tender & Juicy</span>
+                        </div>
+                        <div class="thermo-indicator" id="thermo-indicator" style="display: none;">
+                            <i class="fas fa-atom"></i>
+                            <span>Thermodynamically Optimized</span>
+                        </div>
+                        <button class="btn btn-secondary" id="generate-instructions" onclick="generateInstructions()" style="width: 100%; margin-top: 1rem;">
+                            Generate Cooking Instructions
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Instructions Section -->
+    <section id="instructions" class="instructions-section" style="display: none;">
+        <div class="container">
+            <div class="instructions-header">
+                <h2 class="section-title">Step-by-Step Cooking Instructions</h2>
+                <button class="btn btn-outline" onclick="hideInstructions()">
+                    <i class="fas fa-arrow-left"></i> Back to Calculator
+                </button>
+            </div>
+            <div class="instructions-container">
+                <div class="instructions-overview">
+                    <div class="cooking-summary">
+                        <h3>Cooking Summary</h3>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <i class="fas fa-drumstick-bite"></i>
+                                <div>
+                                    <strong>Protein:</strong>
+                                    <span id="summary-protein">Beef</span>
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <i class="fas fa-thermometer-half"></i>
+                                <div>
+                                    <strong>Temperature:</strong>
+                                    <span id="summary-temp">129°F (54°C)</span>
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <i class="fas fa-clock"></i>
+                                <div>
+                                    <strong>Time:</strong>
+                                    <span id="summary-time">2.5 hours</span>
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <i class="fas fa-ruler"></i>
+                                <div>
+                                    <strong>Thickness:</strong>
+                                    <span id="summary-thickness">1 inch</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="instructions-steps">
+                    <h3>Cooking Instructions</h3>
+                    <div class="step-timeline" id="cooking-steps">
+                        <!-- Steps will be generated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="tips-section">
+                    <h3>Pro Tips</h3>
+                    <div class="tips-grid" id="cooking-tips">
+                        <!-- Tips will be generated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="safety-section">
+                    <h3><i class="fas fa-shield-alt"></i> Safety Guidelines</h3>
+                    <div class="safety-alerts" id="safety-guidelines">
+                        <!-- Safety guidelines will be generated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing">
+        <div class="container">
+            <h2 class="section-title">Choose Your Plan</h2>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>Free Forever</h3>
+                    <div class="price">$0<span>/forever</span></div>
+                    <ul class="features-list">
+                        <li><i class="fas fa-check"></i> Basic calculations</li>
+                        <li><i class="fas fa-check"></i> Beef only</li>
+                        <li><i class="fas fa-check"></i> Mobile access</li>
+                    </ul>
+                    <button class="btn btn-outline">Get Started Free</button>
+                </div>
+                <div class="pricing-card featured">
+                    <h3>Pro Chef</h3>
+                    <div class="price">$10<span>/year</span></div>
+                    <ul class="features-list">
+                        <li><i class="fas fa-check"></i> Advanced calculations</li>
+                        <li><i class="fas fa-check"></i> All meat types (chicken, pork, fish, vegetables)</li>
+                        <li><i class="fas fa-check"></i> Recipe analytics</li>
+                        <li><i class="fas fa-check"></i> Team sharing</li>
+                    </ul>
+                    <button class="btn btn-primary">Upgrade to Pro</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer id="contact" class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>SousSpeed</h3>
+                    <p>Precision cooking tools for professional chefs worldwide.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <ul>
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#pricing">Pricing</a></li>
+                        <li><a href="#calculator">Calculator</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Support</h4>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">Help Center</a></li>
+                        <li><a href="#">Contact Us</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Connect</h4>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-linkedin"></i></a>
+                        <a href="#"><i class="fab fa-instagram"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 SousSpeed. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
