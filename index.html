@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SousSpeed - Sous Vide Time Calculator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-hint {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.2em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .results {
+            margin-top: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 5px solid #667eea;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+            animation: slideIn 0.4s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-title {
+            color: #667eea;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .result-item {
+            margin-bottom: 12px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+        }
+
+        .result-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 3px;
+        }
+
+        .result-value {
+            color: #333;
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .explanation {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            color: #555;
+            line-height: 1.6;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #999;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🥩 SousSpeed</h1>
+        <p class="subtitle">Calculate optimal sous vide cooking time</p>
+
+        <form id="calculatorForm">
+            <div class="form-group">
+                <label for="meatType">Meat Type</label>
+                <select id="meatType" required>
+                    <option value="">Select meat type...</option>
+                    <option value="beef">Beef Steak</option>
+                    <option value="pork">Pork Chop</option>
+                    <option value="chicken">Chicken Breast</option>
+                    <option value="fish">Fish Fillet</option>
+                    <option value="lamb">Lamb Chop</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="thickness">Thickness (cm)</label>
+                <input type="number" id="thickness" min="0.5" max="10" step="0.1" value="2.5" required>
+                <div class="input-hint">Typical range: 1-5 cm</div>
+            </div>
+
+            <div class="form-group">
+                <label for="startTemp">Starting Temperature (°C)</label>
+                <input type="number" id="startTemp" min="-20" max="25" step="0.5" value="5" required>
+                <div class="input-hint">Fridge: 4°C, Room: 20°C, Frozen: -18°C</div>
+            </div>
+
+            <div class="form-group">
+                <label for="waterTemp">Water Bath Temperature (°C)</label>
+                <input type="number" id="waterTemp" min="50" max="85" step="0.5" value="57" required>
+                <div class="input-hint">Common range: 54-60°C for steaks</div>
+            </div>
+
+            <button type="submit">Calculate Cooking Time</button>
+        </form>
+
+        <div id="results" class="results">
+            <div class="result-title">⏱️ Cooking Time Results</div>
+            <div class="result-item">
+                <div class="result-label">Recommended Cooking Time:</div>
+                <div class="result-value" id="cookingTime">-</div>
+            </div>
+            <div class="result-item">
+                <div class="result-label">Time to Core Temperature (90%):</div>
+                <div class="result-value" id="coreTime">-</div>
+            </div>
+            <div class="result-item">
+                <div class="result-label">Thermal Diffusivity:</div>
+                <div class="result-value" id="thermalDiff">-</div>
+            </div>
+            <div class="explanation" id="explanation">-</div>
+        </div>
+
+        <div class="footer">
+            Using heat transfer equations for accurate results
+        </div>
+    </div>
+
+    <script src="calculator.js"></script>
+</body>
+</html>
