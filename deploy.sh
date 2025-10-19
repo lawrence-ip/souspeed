@@ -58,24 +58,58 @@ python3 -c "from thermo_calculator import ThermodynamicCalculator; print('✅ Ca
 # Option 1: Docker deployment (recommended)
 echo ""
 echo "Choose deployment method:"
-echo "1) Docker (recommended for production)"
-echo "2) Direct Python with nginx"
-echo "3) Simple Python server (development only)"
-read -p "Enter choice (1-3): " choice
+echo "1) Docker with port 8080 (DigitalOcean App Platform)"
+echo "2) Docker with port 80 (Traditional droplet)"
+echo "3) Direct Python with nginx"
+echo "4) Simple Python server (development only)"
+read -p "Enter choice (1-4): " choice
 
 case $choice in
     1)
-        print_status "Deploying with Docker..."
+        print_status "Deploying with Docker (DigitalOcean App Platform - port 8080)..."
         
-        # Build and start with docker-compose
+        # Create app platform docker-compose
+        cat > docker-compose.app.yml << EOF
+version: '3.8'
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - FLASK_ENV=production
+      - PORT=8080
+    restart: unless-stopped
+EOF
+        
+        # Build and start
+        sudo docker-compose -f docker-compose.app.yml down 2>/dev/null || true
+        sudo docker-compose -f docker-compose.app.yml build
+        sudo docker-compose -f docker-compose.app.yml up -d
+        
+        # Wait and test
+        sleep 15
+        if curl -s http://localhost:8080/api/health > /dev/null; then
+            print_status "Docker deployment successful on port 8080!"
+            print_status "Application ready for DigitalOcean App Platform"
+        else
+            print_error "Docker deployment failed"
+            sudo docker-compose -f docker-compose.app.yml logs
+        fi
+        ;;
+        
+    2)
+        print_status "Deploying with Docker (Traditional - port 80)..."
+        
+        # Use original docker-compose with port 80
+        sed -i 's/8080/5000/g' docker-compose.yml
+        sed -i 's/"80:8080"/"80:5000"/g' docker-compose.yml
+        
         sudo docker-compose down 2>/dev/null || true
         sudo docker-compose build
         sudo docker-compose up -d
         
-        # Wait for service to start
         sleep 10
-        
-        # Test the deployment
         if curl -s http://localhost/api/health > /dev/null; then
             print_status "Docker deployment successful!"
             print_status "Application is running at: http://$(curl -s ifconfig.me)"
@@ -85,7 +119,7 @@ case $choice in
         fi
         ;;
         
-    2)
+    3)
         print_status "Deploying with nginx reverse proxy..."
         
         # Create nginx configuration
@@ -151,7 +185,7 @@ EOF
         fi
         ;;
         
-    3)
+    4)
         print_status "Starting development server..."
         print_warning "This is not recommended for production!"
         

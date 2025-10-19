@@ -148,11 +148,13 @@ def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    # Production configuration
-    port = int(os.environ.get('PORT', 5000))
+    # Production configuration - flexible port handling
+    port = int(os.environ.get('PORT', os.environ.get('HTTP_PORT', 8080)))
     debug = os.environ.get('FLASK_ENV') == 'development'
+    host = os.environ.get('HOST', '0.0.0.0')
     
     print("🚀 Starting SousSpeed Production Server...")
+    print(f"   Host: {host}")
     print(f"   Port: {port}")
     print(f"   Debug: {debug}")
     print("   Available endpoints:")
@@ -161,4 +163,4 @@ if __name__ == '__main__':
     print("     GET  /api/health - Health check")
     print("     GET  /api/protein-properties - Protein properties")
     
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    app.run(host=host, port=port, debug=debug)

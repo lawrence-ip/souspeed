@@ -1,0 +1,20 @@
+name: souspeed
+services:
+- name: web
+  source_dir: /
+  github:
+    repo: lawrence-ip/souspeed
+    branch: main
+    deploy_on_push: true
+  run_command: gunicorn --bind 0.0.0.0:8080 --workers 2 --timeout 60 app:app
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8080
+  health_check:
+    http_path: /api/health
+  envs:
+  - key: FLASK_ENV
+    value: production
+  - key: PORT
+    value: "8080"
