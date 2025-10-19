@@ -65,7 +65,109 @@ pip3 install -r requirements.txt
 ├── test_calculator.py      # Testing utilities
 ├── start.sh                # Startup script
 ├── requirements.txt        # Python dependencies
-└── README.md               # This file
+└── # SousSpeed - Sous Vide Optimization Tool
+
+Advanced thermodynamic calculator for sous vide cooking optimization using dual free energy principles.
+
+## Features
+
+- **Dual Thermodynamic Analysis**: Uses both Gibbs (G=U-TS+PV) and Helmholtz (F=U-TS) free energy
+- **Weight-Based Calculations**: Precise timing and energy calculations with actual meat weights
+- **Temperature Units**: Celsius default with optional Fahrenheit support
+- **Time Optimization**: 16-46% cooking time reduction through high-temperature acceleration
+- **Professional Grade**: Restaurant-quality precision for chefs
+
+## Quick Start
+
+### Local Development
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 app.py
+```
+
+### Digital Ocean Deployment
+
+**Option 1: One-Click Deploy (Recommended)**
+```bash
+git clone https://github.com/lawrence-ip/souspeed.git
+cd souspeed
+chmod +x deploy.sh
+./deploy.sh
+```
+
+**Option 2: Docker Deploy**
+```bash
+sudo docker-compose up -d
+```
+
+**Option 3: Manual Deploy**
+```bash
+# Install dependencies
+sudo apt-get update && sudo apt-get install -y python3 python3-pip nginx
+
+# Setup application
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Run with gunicorn
+gunicorn --bind 0.0.0.0:5000 --workers 2 app:app
+```
+
+## API Usage
+
+### Calculate Cooking Parameters
+```bash
+curl -X POST http://your-server/api/calculate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "protein_type": "beef",
+    "thickness_inches": 1.5,
+    "target_temp_celsius": 54,
+    "doneness": "medium-rare",
+    "weight_kg": 0.8
+  }'
+```
+
+### Health Check
+```bash
+curl http://your-server/api/health
+```
+
+## Deployment Troubleshooting
+
+### Common Digital Ocean Issues Fixed
+
+1. **Missing Production App**: Created `app.py` as single-file Flask application
+2. **Port Configuration**: Uses environment PORT or defaults to 5000
+3. **Static File Serving**: Flask serves HTML, CSS, JS directly
+4. **Process Management**: Includes systemd service and Docker configs
+5. **Reverse Proxy**: Nginx configuration for production traffic
+6. **Dependencies**: Added gunicorn for production WSGI server
+
+### Quick Fixes
+
+**Port Already in Use:**
+```bash
+sudo lsof -i :5000
+sudo kill -9 <PID>
+```
+
+**Permission Denied:**
+```bash
+sudo chown -R $USER:$USER /home/$USER/souspeed
+chmod +x deploy.sh
+```
+
+**Service Won't Start:**
+```bash
+sudo systemctl status souspeed
+sudo journalctl -u souspeed -f
+```
+
+The automated deploy script handles most issues automatically!               # This file
 ```
 
 ## 🧪 Thermodynamic Engine

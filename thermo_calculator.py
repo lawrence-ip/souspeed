@@ -215,7 +215,7 @@ class ThermodynamicCalculator:
         return delta_g
     
     def calculate_optimal_temperature_profile(self, protein_type: str, thickness_inches: float,
-                                            target_temp: float) -> Tuple[float, float, float]:
+                                            target_temp: float, weight_kg: float = None) -> Tuple[float, float, float]:
         """
         Calculate optimal temperature profile using Helmholtz free energy minimization.
         
@@ -240,9 +240,9 @@ class ThermodynamicCalculator:
             # Calculate Helmholtz free energy for this temperature change
             helmholtz_change = self.calculate_helmholtz_free_energy(20, test_high_temp, protein_type)
             
-            # Calculate time efficiency at this temperature
+            # Calculate time efficiency at this temperature with weight consideration
             time_high, time_remaining = self.calculate_accelerated_equilibrium_time(
-                protein_type, thickness_inches, test_high_temp, target_temp
+                protein_type, thickness_inches, test_high_temp, target_temp, weight_kg
             )
             
             total_time = time_high + time_remaining
@@ -282,7 +282,7 @@ class ThermodynamicCalculator:
         return h_base * enhancement_factor
     
     def calculate_accelerated_equilibrium_time(self, protein_type: str, thickness_inches: float,
-                                             temp_high: float, temp_target: float) -> Tuple[float, float]:
+                                             temp_high: float, temp_target: float, weight_kg: float = None) -> Tuple[float, float]:
         """
         Calculate equilibrium time with accelerated heat transfer using both thermodynamic principles.
         Uses Gibbs free energy (G=U-TS+PV) and Helmholtz free energy (F=U-TS) for optimization.
@@ -292,6 +292,7 @@ class ThermodynamicCalculator:
             thickness_inches: Thickness in inches
             temp_high: High temperature phase in Celsius
             temp_target: Target temperature in Celsius
+            weight_kg: Weight of the protein in kilograms (optional, affects thermal mass)
             
         Returns:
             Tuple of (high_temp_phase_time, remaining_time) in hours
@@ -305,6 +306,25 @@ class ThermodynamicCalculator:
         # Calculate both free energy changes for thermodynamic optimization
         gibbs_change = self.calculate_gibbs_energy_change(20, temp_high, protein_type)
         helmholtz_change = self.calculate_helmholtz_free_energy(temp_target, temp_high, protein_type)
+        
+        # Weight-based thermal mass calculations
+        if weight_kg is not None:
+            # Calculate thermal mass effect (larger mass takes longer to heat)
+            # Thermal mass = mass × specific_heat
+            thermal_mass = weight_kg * props.specific_heat
+            
+            # Mass factor affects heating rate (exponential relationship)
+            mass_factor = 1.0 + (weight_kg / 2.0) ** 0.7  # Empirical scaling
+            
+            # Enhanced thermal diffusivity accounting for mass distribution
+            effective_diffusivity = props.thermal_diffusivity / mass_factor
+        else:
+            # Estimate weight from dimensions (assuming roughly rectangular piece)
+            estimated_volume_m3 = (thickness_inches * 0.0254) * (thickness_inches * 0.0254 * 3) * (thickness_inches * 0.0254 * 2)
+            estimated_weight = estimated_volume_m3 * props.density
+            thermal_mass = estimated_weight * props.specific_heat
+            mass_factor = 1.0 + (estimated_weight / 2.0) ** 0.7
+            effective_diffusivity = props.thermal_diffusivity / mass_factor
         
         # Enhanced heat transfer coefficient using thermodynamic driving forces
         h_base = self.calculate_heat_transfer_coefficient(temp_target)
@@ -325,12 +345,12 @@ class ThermodynamicCalculator:
             eigenvalue_enhanced = self.get_first_eigenvalue(enhanced_biot)
             fourier_high = -math.log(0.1) / (eigenvalue_enhanced ** 2)
         
-        # Time for high temperature phase
-        time_high_seconds = (fourier_high * (characteristic_length ** 2)) / props.thermal_diffusivity
+        # Time for high temperature phase (using weight-adjusted thermal diffusivity)
+        time_high_seconds = (fourier_high * (characteristic_length ** 2)) / effective_diffusivity
         time_high_hours = time_high_seconds / 3600
         
         # Effective penetration achieved during high temp phase
-        penetration_depth = 2 * math.sqrt(props.thermal_diffusivity * time_high_seconds)
+        penetration_depth = 2 * math.sqrt(effective_diffusivity * time_high_seconds)
         effective_thickness = max(0.1, thickness_inches * 0.0254 - penetration_depth)
         
         # Remaining time at target temperature (much reduced due to pre-heating)
@@ -348,13 +368,13 @@ class ThermodynamicCalculator:
                 eigenvalue_normal = self.get_first_eigenvalue(normal_biot)
                 fourier_remaining = -math.log(0.01) / (eigenvalue_normal ** 2)
             
-            remaining_seconds = (fourier_remaining * (remaining_char_length ** 2)) / props.thermal_diffusivity
+            remaining_seconds = (fourier_remaining * (remaining_char_length ** 2)) / effective_diffusivity
             remaining_time = remaining_seconds / 3600
         
         return time_high_hours, remaining_time
     
     def calculate_optimal_profile(self, protein_type: str, thickness_inches: float, 
-                                target_temp: float) -> Dict[str, Any]:
+                                target_temp: float, weight_kg: float = None) -> Dict[str, Any]:
         """
         Calculate optimal two-temperature cooking profile using both Gibbs and Helmholtz free energy.
         G = U - TS + PV (Gibbs) and F = U - TS (Helmholtz) for comprehensive optimization.
@@ -363,22 +383,23 @@ class ThermodynamicCalculator:
             protein_type: Type of protein
             thickness_inches: Thickness in inches
             target_temp: Target temperature in Celsius
+            weight_kg: Weight of the protein in kilograms (optional, improves accuracy)
             
         Returns:
-            Dictionary with optimal cooking parameters
+            Dictionary with optimal cooking parameters including weight effects
         """
         # Optimize high temperature using Helmholtz free energy minimization
         optimal_temp_high, optimal_duration, efficiency = self.calculate_optimal_temperature_profile(
-            protein_type, thickness_inches, target_temp
+            protein_type, thickness_inches, target_temp, weight_kg
         )
         
         # Calculate both free energy changes for the optimized profile
         gibbs_change = self.calculate_gibbs_energy_change(20, optimal_temp_high, protein_type)
         helmholtz_change = self.calculate_helmholtz_free_energy(target_temp, optimal_temp_high, protein_type)
         
-        # Calculate accelerated equilibrium times with optimal temperature
+        # Calculate accelerated equilibrium times with optimal temperature and weight
         time_high, time_remaining = self.calculate_accelerated_equilibrium_time(
-            protein_type, thickness_inches, optimal_temp_high, target_temp
+            protein_type, thickness_inches, optimal_temp_high, target_temp, weight_kg
         )
         
         # Total time is significantly reduced due to thermodynamic optimization
@@ -394,6 +415,15 @@ class ThermodynamicCalculator:
         thickness_meters = thickness_inches * 0.0254
         penetration_ratio = min(1.0, penetration_depth / thickness_meters)
         
+        # Calculate total energy requirement if weight is known
+        total_energy_kj = None
+        if weight_kg is not None:
+            props = self.protein_properties[protein_type]
+            # Energy = mass × specific_heat × ΔT
+            delta_t = optimal_temp_high - 20  # Assuming room temp start
+            total_energy_j = weight_kg * props.specific_heat * delta_t
+            total_energy_kj = total_energy_j / 1000  # Convert to kJ
+        
         return {
             'high_temp_duration': time_high,  # hours
             'remaining_time': time_remaining,  # hours  
@@ -404,6 +434,7 @@ class ThermodynamicCalculator:
             'gibbs_energy_change': gibbs_change,
             'helmholtz_energy_change': helmholtz_change,
             'optimal_high_temp': optimal_temp_high,
+            'total_energy_kj': total_energy_kj,
             'efficiency': self.calculate_efficiency(protein_type, thickness_inches)
         }
     
@@ -461,7 +492,7 @@ class ThermodynamicCalculator:
             return 0.55  # Lower efficiency for thick/low conductivity items
     
     def calculate_cooking_parameters(self, protein_type: str, thickness_inches: float,
-                                   target_temp_celsius: float, doneness: str) -> Dict[str, Any]:
+                                   target_temp_celsius: float, doneness: str, weight_kg: float = None) -> Dict[str, Any]:
         """
         Main calculation function that returns all cooking parameters using enhanced thermodynamics.
         
@@ -470,13 +501,14 @@ class ThermodynamicCalculator:
             thickness_inches: Thickness in inches
             target_temp_celsius: Target temperature in Celsius
             doneness: Doneness level (rare, medium-rare, etc.)
+            weight_kg: Weight of the protein in kilograms (optional, improves accuracy)
             
         Returns:
-            Complete cooking parameter dictionary with significant time reductions
+            Complete cooking parameter dictionary with significant time reductions and weight effects
         """
         try:
-            # Calculate enhanced optimal profile with Gibbs energy considerations
-            profile = self.calculate_optimal_profile(protein_type, thickness_inches, target_temp_celsius)
+            # Calculate enhanced optimal profile with Gibbs energy considerations and weight
+            profile = self.calculate_optimal_profile(protein_type, thickness_inches, target_temp_celsius, weight_kg)
             
             # Calculate additional parameters
             biot = self.calculate_biot_number(protein_type, thickness_inches)
@@ -497,6 +529,7 @@ class ThermodynamicCalculator:
                 'success': True,
                 'protein_type': protein_type,
                 'thickness_inches': thickness_inches,
+                'weight_kg': weight_kg,
                 'target_temp_celsius': target_temp_celsius,
                 'doneness': doneness,
                 'biot_number': round(biot, 3),
@@ -513,6 +546,7 @@ class ThermodynamicCalculator:
                 'penetration_ratio': round(profile['penetration_ratio'], 3),
                 'gibbs_energy_change': round(profile['gibbs_energy_change'], 1),
                 'helmholtz_energy_change': round(profile['helmholtz_energy_change'], 1),
+                'total_energy_kj': profile['total_energy_kj'],
                 'initial_temp_celsius': round(profile['optimal_high_temp'], 1),
                 'initial_temp_fahrenheit': round(profile['optimal_high_temp'] * 9/5 + 32),
                 'target_temp_fahrenheit': round(target_temp_celsius * 9/5 + 32)
@@ -533,17 +567,31 @@ def main():
     Default units: Celsius (optional --fahrenheit flag for input)
     """
     if len(sys.argv) < 5:
-        print("Usage: python thermo_calculator.py <protein_type> <thickness_inches> <target_temp> <doneness> [--fahrenheit]")
+        print("Usage: python thermo_calculator.py <protein_type> <thickness_inches> <target_temp> <doneness> [weight_kg] [--fahrenheit]")
         print("Example: python thermo_calculator.py beef 1.5 54 medium-rare")
-        print("Example: python thermo_calculator.py beef 1.5 129.2 medium-rare --fahrenheit")
+        print("Example: python thermo_calculator.py beef 1.5 54 medium-rare 0.8")
+        print("Example: python thermo_calculator.py beef 1.5 129.2 medium-rare 0.8 --fahrenheit")
         print("\nDefault temperature unit: Celsius")
         print("Use --fahrenheit flag for Fahrenheit input temperatures")
+        print("Weight in kilograms is optional but improves calculation accuracy")
         sys.exit(1)
     
     protein_type = sys.argv[1].lower()
     thickness_inches = float(sys.argv[2])
     target_temp = float(sys.argv[3])
     doneness = sys.argv[4].lower()
+    
+    # Check for optional weight parameter (5th argument if it's a number)
+    weight_kg = None
+    if len(sys.argv) > 5:
+        try:
+            # Try to parse as weight if it's a number
+            potential_weight = float(sys.argv[5])
+            if potential_weight > 0:  # Valid weight
+                weight_kg = potential_weight
+        except ValueError:
+            # Not a number, probably a flag
+            pass
     
     # Check for Fahrenheit flag
     use_fahrenheit = '--fahrenheit' in sys.argv or '-f' in sys.argv
@@ -558,18 +606,24 @@ def main():
     
     calculator = ThermodynamicCalculator()
     result = calculator.calculate_cooking_parameters(
-        protein_type, thickness_inches, target_temp_celsius, doneness
+        protein_type, thickness_inches, target_temp_celsius, doneness, weight_kg
     )
     
     if result['success']:
         print(f"\n=== SOUSPEED Thermodynamic Analysis ===")
         print(f"Protein: {result['protein_type'].title()}")
         print(f"Thickness: {result['thickness_inches']}\"")
+        if result['weight_kg']:
+            print(f"Weight: {result['weight_kg']} kg ({result['weight_kg'] * 2.20462:.1f} lbs)")
+        else:
+            print(f"Weight: Estimated from dimensions")
         print(f"Target: {result['target_temp_celsius']}°C ({result['target_temp_fahrenheit']}°F)")
         print(f"Doneness: {result['doneness'].title()}")
         print(f"\n--- Free Energy Analysis ---")
         print(f"Gibbs Energy Change (G=U-TS+PV): {result['gibbs_energy_change']} J/kg")
         print(f"Helmholtz Optimization (F=U-TS): Applied for temperature profile")
+        if result['total_energy_kj']:
+            print(f"Total Energy Required: {result['total_energy_kj']:.1f} kJ")
         print(f"\n--- Optimized Cooking Profile ---")
         print(f"High Temperature Phase: {result['high_temp_duration_minutes']} min at {result['initial_temp_celsius']}°C ({result['initial_temp_fahrenheit']}°F)")
         print(f"Equilibration Phase: {result['remaining_time_minutes']} min at {result['target_temp_celsius']}°C")
