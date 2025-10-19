@@ -308,39 +308,62 @@ class ThermodynamicCalculator:
             mass_factor = 1.0 + (estimated_weight / 1.0) ** 0.5
             effective_diffusivity = props.thermal_diffusivity / mass_factor
         
-        # Calculate heat transfer parameters
-        h_convection = self.calculate_heat_transfer_coefficient(bath_temp)
-        biot_number = (h_convection * characteristic_length) / props.thermal_conductivity
+        # Apply Fourier's Law of Heat Conduction: Q/t = kA((T1-T2)/l)
+        # Where: Q/t = heat transfer rate, k = thermal conductivity, A = area,
+        #        T1-T2 = temperature difference, l = thickness
         
-        # Calculate time for core to reach target temperature
-        # Temperature difference: from 25°C to target_core_temp with bath at bath_temp
-        temp_ratio_target = (target_core_temp - self.ROOM_TEMPERATURE_C) / (bath_temp - self.ROOM_TEMPERATURE_C)
+        # Calculate geometry parameters based on weight and thickness
+        thickness_m = thickness_inches * 0.0254  # Convert to meters
         
-        if biot_number < 0.1:
-            # Lumped capacitance: T(t) = T_bath + (T_initial - T_bath) * exp(-t/τ)
-            # Solve for t when core reaches target: target = bath + (25 - bath) * exp(-t/τ)
-            if temp_ratio_target >= 1.0:
-                return 0.0  # Core would exceed target immediately
+        # Estimate mass and calculate realistic geometry if not provided
+        if weight_kg is None:
+            estimated_volume_m3 = thickness_m ** 3 * 6  # Rough volume estimate
+            weight_kg = estimated_volume_m3 * props.density
+        
+        # Calculate actual volume from weight and density
+        actual_volume_m3 = weight_kg / props.density
+        
+        # More accurate surface area calculation based on weight and thickness
+        # Assuming roughly rectangular piece: V = L × W × T, surface area accounts for all sides
+        if thickness_m > 0:
+            # Calculate length and width from volume and thickness
+            base_area = actual_volume_m3 / thickness_m  # L × W
+            length_width = math.sqrt(base_area)  # Assume square cross-section for simplicity
             
-            # τ = ρVc/(hA) for lumped capacitance
-            volume = (thickness_inches * 0.0254) ** 3 * 6  # Rough volume
-            surface_area = (thickness_inches * 0.0254) ** 2 * 22  # Rough surface area  
-            tau = (props.density * volume * props.specific_heat) / (h_convection * surface_area)
-            
-            time_to_target = -tau * math.log(1 - temp_ratio_target)
+            # Total surface area: 2(LW + LT + WT) = 2(base_area + 2 × length_width × thickness)
+            surface_area = 2 * (base_area + 2 * length_width * thickness_m)
         else:
-            # Use eigenvalue solution for infinite slab
-            eigenvalue = self.get_first_eigenvalue(biot_number)
+            surface_area = 6 * (actual_volume_m3 ** (2/3))  # Sphere approximation fallback
+        
+        # Calculate thermal mass with weight-dependent heat capacity effects
+        # Larger pieces have slightly different effective heat capacity due to structure
+        weight_factor = 1.0 + 0.1 * math.log(1 + weight_kg)  # Logarithmic scaling
+        effective_specific_heat = props.specific_heat * weight_factor
+        thermal_mass = weight_kg * effective_specific_heat  # J/K
+        
+        # Apply Fourier's Law to calculate heat transfer rate
+        # Q/t = k * A * (T_bath - T_core) / l
+        def calculate_heating_rate(current_core_temp):
+            temp_diff = bath_temp - current_core_temp
+            heat_rate = props.thermal_conductivity * surface_area * temp_diff / thickness_m
+            return heat_rate  # Watts (J/s)
+        
+        # Simulate heating using small time steps
+        current_temp = self.ROOM_TEMPERATURE_C
+        time_step = 30.0  # 30 second time steps
+        total_time = 0.0
+        
+        while current_temp < target_core_temp and total_time < 24 * 3600:  # Max 24 hours
+            heat_rate = calculate_heating_rate(current_temp)
+            temp_rise = (heat_rate * time_step) / thermal_mass  # ΔT = Q / (m * c)
+            current_temp += temp_rise
+            total_time += time_step
             
-            # For infinite slab: θ/θ₀ = exp(-eigenvalue² * Fo)
-            # where θ = (T - T_bath)/(T_initial - T_bath)
-            theta_target = 1 - temp_ratio_target
-            
-            if theta_target <= 0:
-                return 0.0  # Core would exceed target immediately
-            
-            fourier_target = -math.log(theta_target) / (eigenvalue ** 2)
-            time_to_target = (fourier_target * (characteristic_length ** 2)) / effective_diffusivity
+            # Safety check: if we're very close to target, break
+            if current_temp >= target_core_temp * 0.98:
+                break
+        
+        time_to_target = total_time
         
         # Convert to hours and add safety margin (stop when core reaches 95% of target temp)
         safe_time_hours = (time_to_target * 0.90) / 3600
@@ -398,37 +421,51 @@ class ThermodynamicCalculator:
         props = self.protein_properties[protein_type]
         characteristic_length = (thickness_inches * 0.0254) / 2  # Convert to meters
         
-        # Weight-based thermal mass calculations
-        if weight_kg is not None:
-            # Thermal mass = mass × specific_heat
-            thermal_mass = weight_kg * props.specific_heat
-            # Mass factor affects heating rate (larger mass takes longer)
-            mass_factor = 1.0 + (weight_kg / 1.0) ** 0.5  # More realistic scaling
-            effective_diffusivity = props.thermal_diffusivity / mass_factor
+        # Apply Fourier's Law of Heat Conduction: Q/t = kA((T1-T2)/l)
+        # Calculate geometry and thermal parameters based on actual weight
+        thickness_m = thickness_inches * 0.0254  # Convert to meters
+        
+        # Estimate mass if not provided
+        if weight_kg is None:
+            estimated_volume_m3 = thickness_m ** 3 * 6  # Rough volume estimate
+            weight_kg = estimated_volume_m3 * props.density
+        
+        # Calculate actual volume and realistic surface area from weight
+        actual_volume_m3 = weight_kg / props.density
+        
+        # Weight-dependent surface area calculation
+        if thickness_m > 0:
+            base_area = actual_volume_m3 / thickness_m  # L × W from volume and thickness
+            length_width = math.sqrt(base_area)
+            # Total surface area for heat transfer
+            surface_area = 2 * (base_area + 2 * length_width * thickness_m)
         else:
-            # Estimate weight from dimensions
-            estimated_volume_m3 = (thickness_inches * 0.0254) * (thickness_inches * 0.0254 * 3) * (thickness_inches * 0.0254 * 2)
-            estimated_weight = estimated_volume_m3 * props.density
-            mass_factor = 1.0 + (estimated_weight / 1.0) ** 0.5
-            effective_diffusivity = props.thermal_diffusivity / mass_factor
+            surface_area = 6 * (actual_volume_m3 ** (2/3))  # Sphere approximation
         
-        # Calculate Biot number for heat transfer analysis
-        h_convection = self.calculate_heat_transfer_coefficient(target_temp)
-        biot_number = (h_convection * characteristic_length) / props.thermal_conductivity
+        # Calculate thermal mass with weight scaling effects
+        weight_factor = 1.0 + 0.1 * math.log(1 + weight_kg)
+        effective_specific_heat = props.specific_heat * weight_factor
+        thermal_mass = weight_kg * effective_specific_heat  # J/K
         
-        # Calculate Fourier number for desired temperature penetration
-        # For sous vide, we want 99% of target temperature throughout (very precise)
-        if biot_number < 0.1:
-            # Lumped capacitance - uniform temperature quickly
-            fourier_target = -math.log(0.01)  # 99% of temperature difference
-        else:
-            # Use eigenvalue solution for infinite slab
-            eigenvalue = self.get_first_eigenvalue(biot_number)
-            fourier_target = -math.log(0.01) / (eigenvalue ** 2)
+        # Use Fourier's Law to simulate heating to 99% of target temperature
+        current_temp = self.ROOM_TEMPERATURE_C
+        target_for_99_percent = target_temp * 0.99  # 99% completion
+        time_step = 60.0  # 1-minute time steps for sous vide precision
+        total_time = 0.0
         
-        # Calculate time: Fo = α*t/L²  =>  t = Fo*L²/α
-        time_seconds = (fourier_target * (characteristic_length ** 2)) / effective_diffusivity
-        time_hours = time_seconds / 3600
+        while current_temp < target_for_99_percent and total_time < 48 * 3600:  # Max 48 hours
+            # Apply Fourier's Law: Q/t = k * A * (T_bath - T_core) / l
+            temp_diff = target_temp - current_temp
+            heat_rate = props.thermal_conductivity * surface_area * temp_diff / thickness_m
+            temp_rise = (heat_rate * time_step) / thermal_mass  # ΔT = Q / (m * c)
+            current_temp += temp_rise
+            total_time += time_step
+            
+            # Prevent infinite loops with very small temperature differences
+            if temp_diff < 0.01:  # Less than 0.01°C difference
+                break
+        
+        time_hours = total_time / 3600
         
         return time_hours
     

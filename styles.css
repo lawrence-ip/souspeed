@@ -319,6 +319,14 @@ body {
     box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
+.form-help {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+    font-style: italic;
+}
+
 .calculation-results {
     display: flex;
     align-items: center;
@@ -664,6 +672,43 @@ body {
     line-height: 1.5;
 }
 
+/* Theory Link Section */
+.theory-link-section {
+    margin-top: 3rem;
+    text-align: center;
+}
+
+.theory-link-card {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border: 2px solid #fca5a5;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.theory-link-card h4 {
+    color: #dc2626;
+    margin-bottom: 1rem;
+    font-size: 1.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.theory-link-card p {
+    color: #374151;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+    font-size: 1rem;
+}
+
+.theory-link-card .btn {
+    font-size: 1.1rem;
+    padding: 0.75rem 2rem;
+}
+
 /* Pricing Section */
 .pricing {
     padding: 80px 0;
@@ -884,6 +929,50 @@ body {
     color: #dc2626;
     margin-bottom: 1rem;
     text-align: center;
+}
+
+.core-temp-principle {
+    margin: 1.5rem 0;
+}
+
+.principle-box {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border: 2px solid #fca5a5;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+}
+
+.principle-box h5 {
+    color: #dc2626;
+    margin-bottom: 0.75rem;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.principle-box p {
+    margin-bottom: 0.75rem;
+    color: #374151;
+    line-height: 1.5;
+}
+
+.principle-box ul {
+    margin: 0.75rem 0;
+    padding-left: 1rem;
+}
+
+.principle-box li {
+    margin-bottom: 0.5rem;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.principle-box strong {
+    color: #dc2626;
 }
 
 .graph-controls {

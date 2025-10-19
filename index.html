@@ -21,10 +21,10 @@
                     <a href="#features" class="nav-link">Features</a>
                 </li>
                 <li class="nav-item">
-                    <a href="#theory" class="nav-link">Theory</a>
+                    <a href="#calculator" class="nav-link">Calculator</a>
                 </li>
                 <li class="nav-item">
-                    <a href="#calculator" class="nav-link">Calculator</a>
+                    <a href="#theory" class="nav-link">Theory</a>
                 </li>
                 <li class="nav-item">
                     <a href="#pricing" class="nav-link">Pricing</a>
@@ -100,80 +100,6 @@
         </div>
     </section>
 
-    <!-- Theory Section -->
-    <section id="theory" class="theory-section">
-        <div class="container">
-            <h2 class="section-title">Thermodynamic Theory</h2>
-            <p class="section-subtitle">Understanding the science behind optimal sous vide cooking</p>
-            
-            <div class="theory-content">
-                <div class="theory-text">
-                    <div class="theory-card">
-                        <h3><i class="fas fa-atom"></i> Free Energy Optimization</h3>
-                        <p>SousSpeed uses dual thermodynamic principles:</p>
-                        <ul>
-                            <li><strong>Gibbs Free Energy (G = U - TS + PV):</strong> Optimizes pressure-constant cooking conditions</li>
-                            <li><strong>Helmholtz Free Energy (F = U - TS):</strong> Minimizes energy for temperature profile optimization</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="theory-card">
-                        <h3><i class="fas fa-fire"></i> Heat Transfer Physics</h3>
-                        <p>Our calculations incorporate:</p>
-                        <ul>
-                            <li><strong>Biot Number:</strong> Relates internal and external heat transfer resistance</li>
-                            <li><strong>Fourier Number:</strong> Dimensionless time for heat diffusion</li>
-                            <li><strong>Thermal Diffusivity:</strong> Material-specific heat propagation rate</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="theory-card">
-                        <h3><i class="fas fa-balance-scale"></i> Two-Phase Acceleration</h3>
-                        <p>The high-temperature acceleration phase:</p>
-                        <ul>
-                            <li>Rapidly penetrates heat to the core (25°C → Target+8°C)</li>
-                            <li>Reduces total cooking time by 16-46%</li>
-                            <li>Maintains food safety and texture quality</li>
-                        </ul>
-                    </div>
-                </div>
-                
-                <div class="theory-graphs">
-                    <div class="graph-container">
-                        <h4>Temperature vs Time Profile</h4>
-                        <canvas id="temperatureChart" width="400" height="200"></canvas>
-                        <div class="graph-controls">
-                            <label>
-                                Protein: 
-                                <select id="proteinSelect" onchange="updateGraph()">
-                                    <option value="beef">Beef</option>
-                                    <option value="chicken">Chicken</option>
-                                    <option value="pork">Pork</option>
-                                    <option value="fish">Fish</option>
-                                </select>
-                            </label>
-                            <label>
-                                Thickness: 
-                                <input type="range" id="thicknessSlider" min="0.5" max="3" step="0.1" value="1.5" onchange="updateGraph()">
-                                <span id="thicknessValue">1.5"</span>
-                            </label>
-                            <label>
-                                Weight: 
-                                <input type="range" id="weightSlider" min="0.2" max="2" step="0.1" value="0.8" onchange="updateGraph()">
-                                <span id="weightValue">0.8kg</span>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div class="graph-container">
-                        <h4>Free Energy Changes</h4>
-                        <canvas id="energyChart" width="400" height="200"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <!-- Calculator Preview -->
     <section id="calculator" class="calculator-section">
         <div class="container">
@@ -206,6 +132,11 @@
                             <option value="medium-well">Medium Well</option>
                             <option value="well-done">Well Done</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="weight">Weight (kg)</label>
+                        <input type="number" id="weight" min="0.1" max="5" step="0.1" value="0.5" onchange="updateCalculation()">
+                        <small class="form-help">Accurate weight improves Fourier's Law calculations</small>
                     </div>
                 </div>
                 <div class="calculation-results">
@@ -300,6 +231,105 @@
                     <h3><i class="fas fa-shield-alt"></i> Safety Guidelines</h3>
                     <div class="safety-alerts" id="safety-guidelines">
                         <!-- Safety guidelines will be generated by JavaScript -->
+                    </div>
+                </div>
+                
+                <div class="theory-link-section">
+                    <div class="theory-link-card">
+                        <h4><i class="fas fa-graduation-cap"></i> Want to understand the science?</h4>
+                        <p>Learn about the thermodynamic principles, heat transfer physics, and Fourier's Law that power these calculations.</p>
+                        <button class="btn btn-primary" onclick="scrollToTheory()">
+                            <i class="fas fa-atom"></i> Explore the Theory
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Theory Section -->
+    <section id="theory" class="theory-section">
+        <div class="container">
+            <h2 class="section-title">Thermodynamic Theory</h2>
+            <p class="section-subtitle">Understanding the science behind optimal sous vide cooking</p>
+            
+            <div class="theory-content">
+                <div class="theory-text">
+                    <div class="theory-card">
+                        <h3><i class="fas fa-atom"></i> Free Energy Optimization</h3>
+                        <p>SousSpeed uses dual thermodynamic principles:</p>
+                        <ul>
+                            <li><strong>Gibbs Free Energy (G = U - TS + PV):</strong> Optimizes pressure-constant cooking conditions</li>
+                            <li><strong>Helmholtz Free Energy (F = U - TS):</strong> Minimizes energy for temperature profile optimization</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="theory-card">
+                        <h3><i class="fas fa-fire"></i> Heat Transfer Physics</h3>
+                        <p>Our calculations incorporate:</p>
+                        <ul>
+                            <li><strong>Biot Number:</strong> Relates internal and external heat transfer resistance</li>
+                            <li><strong>Fourier Number:</strong> Dimensionless time for heat diffusion</li>
+                            <li><strong>Thermal Diffusivity:</strong> Material-specific heat propagation rate</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="theory-card">
+                        <h3><i class="fas fa-balance-scale"></i> Two-Phase Acceleration</h3>
+                        <p>The high-temperature acceleration phase:</p>
+                        <ul>
+                            <li>Rapidly penetrates heat to the core (25°C → Target+8°C)</li>
+                            <li>Reduces total cooking time by 16-46%</li>
+                            <li>Maintains food safety and texture quality</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="theory-graphs">
+                    <div class="graph-container">
+                        <h4>Temperature vs Time Profile</h4>
+                        <canvas id="temperatureChart" width="400" height="200"></canvas>
+                        
+                        <div class="core-temp-principle">
+                            <div class="principle-box">
+                                <h5><i class="fas fa-exclamation-triangle"></i> Critical Sous Vide Principle</h5>
+                                <p><strong>The meat core temperature NEVER exceeds the target doneness temperature.</strong></p>
+                                <p>This graph shows the correct two-phase approach where:</p>
+                                <ul>
+                                    <li>🔴 <strong>Red line (Core):</strong> Approaches but never exceeds target temperature</li>
+                                    <li>🟢 <strong>Green line (Bath):</strong> Starts higher, then drops to target</li>
+                                    <li>🟡 <strong>Yellow line (Target Max):</strong> The absolute maximum core temperature</li>
+                                </ul>
+                                <p>Using <strong>Fourier's Law of Heat Conduction:</strong> Q/t = kA((T₁-T₂)/l)</p>
+                            </div>
+                        </div>
+                        
+                        <div class="graph-controls">
+                            <label>
+                                Protein: 
+                                <select id="proteinSelect" onchange="updateGraph()">
+                                    <option value="beef">Beef</option>
+                                    <option value="chicken">Chicken</option>
+                                    <option value="pork">Pork</option>
+                                    <option value="fish">Fish</option>
+                                </select>
+                            </label>
+                            <label>
+                                Thickness: 
+                                <input type="range" id="thicknessSlider" min="0.5" max="3" step="0.1" value="1.5" onchange="updateGraph()">
+                                <span id="thicknessValue">1.5"</span>
+                            </label>
+                            <label>
+                                Weight: 
+                                <input type="range" id="weightSlider" min="0.2" max="2" step="0.1" value="0.8" onchange="updateGraph()">
+                                <span id="weightValue">0.8kg</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="graph-container">
+                        <h4>Free Energy Changes</h4>
+                        <canvas id="energyChart" width="400" height="200"></canvas>
                     </div>
                 </div>
             </div>

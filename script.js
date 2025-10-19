@@ -29,6 +29,14 @@ function scrollToCalculator() {
     });
 }
 
+// Scroll to theory function
+function scrollToTheory() {
+    document.getElementById('theory').scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+    });
+}
+
 // Sous vide calculation logic
 const sousVideData = {
     beef: {
@@ -89,6 +97,7 @@ async function updateCalculation() {
     const proteinType = document.getElementById('protein-type').value;
     const thickness = parseFloat(document.getElementById('thickness').value);
     const doneness = document.getElementById('doneness').value;
+    const weight = parseFloat(document.getElementById('weight').value);
     
     // Check if protein type is allowed for current plan
     if (currentPlan === 'free' && !pricingPlans.free.allowedProteins.includes(proteinType)) {
@@ -103,7 +112,7 @@ async function updateCalculation() {
     
     try {
         // Use Python API for precise thermodynamic calculations
-        const thermoData = await fetchThermodynamicCalculation(proteinType, thickness, baseData.tempC, doneness);
+        const thermoData = await fetchThermodynamicCalculation(proteinType, thickness, baseData.tempC, doneness, weight);
         
         if (thermoData.success) {
             // Use scientifically calculated time
@@ -152,6 +161,7 @@ async function updateCalculationFallback() {
     const proteinType = document.getElementById('protein-type').value;
     const thickness = parseFloat(document.getElementById('thickness').value);
     const doneness = document.getElementById('doneness').value;
+    const weight = parseFloat(document.getElementById('weight').value);
     const baseData = sousVideData[proteinType][doneness];
     
     // Use original JavaScript thermodynamic calculator
@@ -176,7 +186,7 @@ async function updateCalculationFallback() {
 }
 
 // Fetch calculations from Python API
-async function fetchThermodynamicCalculation(proteinType, thicknessInches, targetTempC, doneness) {
+async function fetchThermodynamicCalculation(proteinType, thicknessInches, targetTempC, doneness, weightKg) {
     const apiUrl = 'http://localhost:5000/api/calculate';
     
     const response = await fetch(apiUrl, {
@@ -188,7 +198,8 @@ async function fetchThermodynamicCalculation(proteinType, thicknessInches, targe
             protein_type: proteinType,
             thickness_inches: thicknessInches,
             target_temp_celsius: targetTempC,
-            doneness: doneness
+            doneness: doneness,
+            weight_kg: weightKg
         })
     });
     
@@ -929,7 +940,25 @@ function initializeGraphs() {
                 plugins: {
                     title: {
                         display: true,
-                        text: 'Two-Phase Cooking Profile'
+                        text: 'Sous Vide Temperature Profile - Core Never Exceeds Target'
+                    },
+                    legend: {
+                        display: true,
+                        labels: {
+                            generateLabels: function(chart) {
+                                const original = Chart.defaults.plugins.legend.labels.generateLabels;
+                                const labels = original.call(this, chart);
+                                
+                                // Add explanation for target line
+                                labels.forEach(label => {
+                                    if (label.text.includes('Target Max')) {
+                                        label.text += ' - NEVER EXCEEDED';
+                                    }
+                                });
+                                
+                                return labels;
+                            }
+                        }
                     }
                 },
                 scales: {
@@ -1034,18 +1063,21 @@ function updateGraph() {
         timePoints.push(Math.round(time));
         
         if (time <= highPhaseTime) {
-            // High temperature phase
+            // High temperature phase - Core NEVER exceeds target temperature
             bathTemps.push(highTemp);
             const progress = time / highPhaseTime;
-            const coreTemp = 25 + (highTemp - 25) * (1 - Math.exp(-progress * 3));
-            coreTemps.push(Math.round(coreTemp * 10) / 10);
+            // Core approaches target temperature but never exceeds it
+            const maxCoreReach = targetTemp * 0.98; // 98% of target max
+            const coreTemp = 25 + (maxCoreReach - 25) * (1 - Math.exp(-progress * 2.5));
+            coreTemps.push(Math.min(targetTemp, Math.round(coreTemp * 10) / 10));
         } else {
-            // Equilibration phase
+            // Equilibration phase - Core reaches exactly target temperature
             bathTemps.push(targetTemp);
             const equilibrationProgress = (time - highPhaseTime) / equilibrationTime;
-            const startTemp = highTemp * 0.9; // Core was at ~90% of bath temp
-            const coreTemp = startTemp - (startTemp - targetTemp) * equilibrationProgress;
-            coreTemps.push(Math.round(coreTemp * 10) / 10);
+            const startTemp = targetTemp * 0.98; // Start from 98% of target
+            const coreTemp = startTemp + (targetTemp - startTemp) * equilibrationProgress;
+            // Ensure core never exceeds target, even during equilibration
+            coreTemps.push(Math.min(targetTemp, Math.round(coreTemp * 10) / 10));
         }
     }
     
@@ -1054,6 +1086,23 @@ function updateGraph() {
         temperatureChart.data.labels = timePoints;
         temperatureChart.data.datasets[0].data = coreTemps;
         temperatureChart.data.datasets[1].data = bathTemps;
+        
+        // Add target temperature reference line
+        if (!temperatureChart.data.datasets[2]) {
+            temperatureChart.data.datasets.push({
+                label: `Target Max (${targetTemp}°C)`,
+                data: new Array(timePoints.length).fill(targetTemp),
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                borderDash: [5, 5],
+                pointRadius: 0,
+                tension: 0
+            });
+        } else {
+            temperatureChart.data.datasets[2].data = new Array(timePoints.length).fill(targetTemp);
+            temperatureChart.data.datasets[2].label = `Target Max (${targetTemp}°C)`;
+        }
+        
         temperatureChart.update();
     }
     
