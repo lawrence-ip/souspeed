@@ -4,13 +4,13 @@ Production Flask application for SousSpeed deployment on Digital Ocean.
 Serves both static files and API endpoints.
 """
 
-from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, send_file
 from flask_cors import CORS
 import json
 import os
 from thermo_calculator import ThermodynamicCalculator
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
 # Initialize calculator
@@ -30,21 +30,22 @@ def index():
         <p>API is running at <a href="/api/health">/api/health</a></p>
         """, 200
 
-@app.route('/styles.css')
-def serve_css():
-    """Serve CSS file."""
+@app.route('/<path:filename>')
+def serve_static_files(filename):
+    """Serve static files (CSS, JS, images, etc.)."""
     try:
-        return send_from_directory('.', 'styles.css', mimetype='text/css')
+        # Handle specific file types
+        if filename.endswith('.css'):
+            return send_from_directory('.', filename, mimetype='text/css')
+        elif filename.endswith('.js'):
+            return send_from_directory('.', filename, mimetype='application/javascript')
+        elif filename.endswith(('.png', '.jpg', '.jpeg', '.gif', '.ico')):
+            return send_from_directory('.', filename)
+        else:
+            # For other files, let Flask handle it normally
+            return send_from_directory('.', filename)
     except FileNotFoundError:
-        return "", 404
-
-@app.route('/script.js')
-def serve_js():
-    """Serve JavaScript file."""
-    try:
-        return send_from_directory('.', 'script.js', mimetype='application/javascript')
-    except FileNotFoundError:
-        return "", 404
+        return "File not found", 404
 
 @app.route('/api/calculate', methods=['POST'])
 def calculate_cooking_parameters():

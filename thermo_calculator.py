@@ -34,6 +34,9 @@ class ThermodynamicCalculator:
     Uses heat transfer principles and material science for precise calculations.
     """
     
+    # Constants
+    ROOM_TEMPERATURE_C = 25.0  # Assumed starting temperature for meat at room temp
+    
     def __init__(self):
         # Material properties database
         self.protein_properties = {
@@ -217,85 +220,77 @@ class ThermodynamicCalculator:
     def calculate_optimal_temperature_profile(self, protein_type: str, thickness_inches: float,
                                             target_temp: float, weight_kg: float = None) -> Tuple[float, float, float]:
         """
-        Calculate optimal temperature profile using Helmholtz free energy minimization.
+        Calculate optimal two-phase cooking profile with temperature gradient acceleration.
+        Phase 1: Higher bath temperature to create faster heat transfer gradient
+        Phase 2: Target bath temperature for final equilibration
+        Core temperature NEVER exceeds target doneness temperature.
         
         Args:
             protein_type: Type of protein
             thickness_inches: Thickness in inches
-            target_temp: Target temperature in Celsius
+            target_temp: Target temperature in Celsius (max core temperature)
+            weight_kg: Weight of the protein in kilograms
             
         Returns:
-            Tuple of (optimal_high_temp, high_phase_duration, energy_efficiency)
+            Tuple of (optimal_high_bath_temp, high_phase_duration, energy_efficiency)
         """
         props = self.protein_properties[protein_type]
         
-        # Test different high temperatures to find optimal
+        # Test different bath temperatures to find optimal gradient acceleration
         best_efficiency = 0
-        optimal_high_temp = target_temp + 10
+        optimal_high_temp = target_temp + 8  # Start with conservative 8°C above
         best_duration = 0
         
-        for temp_delta in range(8, 16):  # Test 8°C to 15°C above target
-            test_high_temp = target_temp + temp_delta
+        # Test bath temperatures 5°C to 12°C above target for gradient acceleration
+        for temp_delta in range(5, 13):  
+            test_bath_temp = target_temp + temp_delta
             
-            # Calculate Helmholtz free energy for this temperature change
-            helmholtz_change = self.calculate_helmholtz_free_energy(20, test_high_temp, protein_type)
-            
-            # Calculate time efficiency at this temperature with weight consideration
-            time_high, time_remaining = self.calculate_accelerated_equilibrium_time(
-                protein_type, thickness_inches, test_high_temp, target_temp, weight_kg
+            # Calculate how long we can use this higher bath temp before core reaches target
+            high_phase_time = self.calculate_safe_high_temp_duration(
+                protein_type, thickness_inches, test_bath_temp, target_temp, weight_kg
             )
             
-            total_time = time_high + time_remaining
-            conventional_time = self.calculate_conventional_time(protein_type, thickness_inches, target_temp)
-            
-            # Energy efficiency combines time savings with thermodynamic efficiency
-            time_efficiency = (conventional_time - total_time) / conventional_time
-            energy_efficiency = abs(helmholtz_change) / (props.specific_heat * (test_high_temp - target_temp))
-            
-            combined_efficiency = time_efficiency * energy_efficiency
-            
-            if combined_efficiency > best_efficiency:
-                best_efficiency = combined_efficiency
-                optimal_high_temp = test_high_temp
-                best_duration = time_high
+            if high_phase_time > 0.08:  # Must be at least 5 minutes to be worthwhile
+                # Calculate Helmholtz free energy for this temperature gradient
+                helmholtz_change = self.calculate_helmholtz_free_energy(self.ROOM_TEMPERATURE_C, test_bath_temp, protein_type)
+                
+                # Calculate total cooking time with this approach
+                equilibration_time = self.calculate_equilibration_time(
+                    protein_type, thickness_inches, target_temp, weight_kg, high_phase_time
+                )
+                
+                total_time = high_phase_time + equilibration_time
+                conventional_time = self.calculate_conventional_time(protein_type, thickness_inches, target_temp)
+                
+                # Energy efficiency combines time savings with thermodynamic efficiency
+                time_efficiency = max(0, (conventional_time - total_time) / conventional_time)
+                energy_efficiency = abs(helmholtz_change) / (props.specific_heat * temp_delta)
+                
+                combined_efficiency = time_efficiency * energy_efficiency
+                
+                if combined_efficiency > best_efficiency:
+                    best_efficiency = combined_efficiency
+                    optimal_high_temp = test_bath_temp
+                    best_duration = high_phase_time
         
         return optimal_high_temp, best_duration, best_efficiency
     
-    def calculate_enhanced_heat_transfer_coefficient(self, temp_high: float, temp_target: float) -> float:
+    def calculate_safe_high_temp_duration(self, protein_type: str, thickness_inches: float,
+                                        bath_temp: float, target_core_temp: float, 
+                                        weight_kg: float = None) -> float:
         """
-        Calculate enhanced heat transfer coefficient with higher temperature driving force.
-        
-        Args:
-            temp_high: High temperature in Celsius
-            temp_target: Target temperature in Celsius
-            
-        Returns:
-            Enhanced heat transfer coefficient
-        """
-        # Base heat transfer coefficient
-        h_base = self.calculate_heat_transfer_coefficient(temp_target)
-        
-        # Temperature enhancement factor (exponential relationship)
-        temp_ratio = (temp_high + 273.15) / (temp_target + 273.15)
-        enhancement_factor = temp_ratio ** 1.25  # Empirical enhancement
-        
-        return h_base * enhancement_factor
-    
-    def calculate_accelerated_equilibrium_time(self, protein_type: str, thickness_inches: float,
-                                             temp_high: float, temp_target: float, weight_kg: float = None) -> Tuple[float, float]:
-        """
-        Calculate equilibrium time with accelerated heat transfer using both thermodynamic principles.
-        Uses Gibbs free energy (G=U-TS+PV) and Helmholtz free energy (F=U-TS) for optimization.
+        Calculate how long we can use a higher bath temperature before the core reaches target.
+        This ensures the meat core NEVER exceeds the desired doneness temperature.
         
         Args:
             protein_type: Type of protein
-            thickness_inches: Thickness in inches
-            temp_high: High temperature phase in Celsius
-            temp_target: Target temperature in Celsius
-            weight_kg: Weight of the protein in kilograms (optional, affects thermal mass)
+            thickness_inches: Thickness in inches  
+            bath_temp: Higher bath temperature for gradient acceleration
+            target_core_temp: Maximum allowed core temperature (doneness temp)
+            weight_kg: Weight of the protein in kilograms
             
         Returns:
-            Tuple of (high_temp_phase_time, remaining_time) in hours
+            Time in hours we can safely use the higher bath temperature
         """
         if protein_type not in self.protein_properties:
             raise ValueError(f"Unknown protein type: {protein_type}")
@@ -303,114 +298,187 @@ class ThermodynamicCalculator:
         props = self.protein_properties[protein_type]
         characteristic_length = (thickness_inches * 0.0254) / 2  # Convert to meters
         
-        # Calculate both free energy changes for thermodynamic optimization
-        gibbs_change = self.calculate_gibbs_energy_change(20, temp_high, protein_type)
-        helmholtz_change = self.calculate_helmholtz_free_energy(temp_target, temp_high, protein_type)
-        
-        # Weight-based thermal mass calculations
+        # Weight-based thermal mass effect
         if weight_kg is not None:
-            # Calculate thermal mass effect (larger mass takes longer to heat)
-            # Thermal mass = mass × specific_heat
-            thermal_mass = weight_kg * props.specific_heat
-            
-            # Mass factor affects heating rate (exponential relationship)
-            mass_factor = 1.0 + (weight_kg / 2.0) ** 0.7  # Empirical scaling
-            
-            # Enhanced thermal diffusivity accounting for mass distribution
+            mass_factor = 1.0 + (weight_kg / 1.0) ** 0.5
             effective_diffusivity = props.thermal_diffusivity / mass_factor
         else:
-            # Estimate weight from dimensions (assuming roughly rectangular piece)
-            estimated_volume_m3 = (thickness_inches * 0.0254) * (thickness_inches * 0.0254 * 3) * (thickness_inches * 0.0254 * 2)
+            estimated_volume_m3 = (thickness_inches * 0.0254) ** 3 * 6  # Rough estimate
             estimated_weight = estimated_volume_m3 * props.density
-            thermal_mass = estimated_weight * props.specific_heat
-            mass_factor = 1.0 + (estimated_weight / 2.0) ** 0.7
+            mass_factor = 1.0 + (estimated_weight / 1.0) ** 0.5
             effective_diffusivity = props.thermal_diffusivity / mass_factor
         
-        # Enhanced heat transfer coefficient using thermodynamic driving forces
-        h_base = self.calculate_heat_transfer_coefficient(temp_target)
+        # Calculate heat transfer parameters
+        h_convection = self.calculate_heat_transfer_coefficient(bath_temp)
+        biot_number = (h_convection * characteristic_length) / props.thermal_conductivity
         
-        # Combined thermodynamic enhancement
-        temp_ratio = (temp_high + 273.15) / (temp_target + 273.15)
-        gibbs_factor = 1.0 + abs(gibbs_change) / 12000  # Gibbs energy enhancement
-        helmholtz_factor = 1.0 + abs(helmholtz_change) / 8000  # Helmholtz optimization
+        # Calculate time for core to reach target temperature
+        # Temperature difference: from 25°C to target_core_temp with bath at bath_temp
+        temp_ratio_target = (target_core_temp - self.ROOM_TEMPERATURE_C) / (bath_temp - self.ROOM_TEMPERATURE_C)
         
-        h_enhanced = h_base * temp_ratio ** 1.25 * gibbs_factor * helmholtz_factor
-        enhanced_biot = (h_enhanced * characteristic_length) / props.thermal_conductivity
-        
-        # High temperature phase - calculate time to reach 90% of temperature penetration
-        if enhanced_biot < 0.1:
-            # Lumped capacitance - very fast
-            fourier_high = -math.log(0.1)  # 90% penetration
-        else:
-            eigenvalue_enhanced = self.get_first_eigenvalue(enhanced_biot)
-            fourier_high = -math.log(0.1) / (eigenvalue_enhanced ** 2)
-        
-        # Time for high temperature phase (using weight-adjusted thermal diffusivity)
-        time_high_seconds = (fourier_high * (characteristic_length ** 2)) / effective_diffusivity
-        time_high_hours = time_high_seconds / 3600
-        
-        # Effective penetration achieved during high temp phase
-        penetration_depth = 2 * math.sqrt(effective_diffusivity * time_high_seconds)
-        effective_thickness = max(0.1, thickness_inches * 0.0254 - penetration_depth)
-        
-        # Remaining time at target temperature (much reduced due to pre-heating)
-        if effective_thickness <= 0.1:
-            # Fully penetrated, just equilibration time
-            remaining_time = 0.1  # 6 minutes for final equilibration
-        else:
-            # Calculate time for remaining thickness
-            remaining_char_length = effective_thickness / 2
-            normal_biot = self.calculate_biot_number(protein_type, effective_thickness / 0.0254)
+        if biot_number < 0.1:
+            # Lumped capacitance: T(t) = T_bath + (T_initial - T_bath) * exp(-t/τ)
+            # Solve for t when core reaches target: target = bath + (25 - bath) * exp(-t/τ)
+            if temp_ratio_target >= 1.0:
+                return 0.0  # Core would exceed target immediately
             
-            if normal_biot < 0.1:
-                fourier_remaining = -math.log(0.01)  # 99% final equilibrium
-            else:
-                eigenvalue_normal = self.get_first_eigenvalue(normal_biot)
-                fourier_remaining = -math.log(0.01) / (eigenvalue_normal ** 2)
+            # τ = ρVc/(hA) for lumped capacitance
+            volume = (thickness_inches * 0.0254) ** 3 * 6  # Rough volume
+            surface_area = (thickness_inches * 0.0254) ** 2 * 22  # Rough surface area  
+            tau = (props.density * volume * props.specific_heat) / (h_convection * surface_area)
             
-            remaining_seconds = (fourier_remaining * (remaining_char_length ** 2)) / effective_diffusivity
-            remaining_time = remaining_seconds / 3600
+            time_to_target = -tau * math.log(1 - temp_ratio_target)
+        else:
+            # Use eigenvalue solution for infinite slab
+            eigenvalue = self.get_first_eigenvalue(biot_number)
+            
+            # For infinite slab: θ/θ₀ = exp(-eigenvalue² * Fo)
+            # where θ = (T - T_bath)/(T_initial - T_bath)
+            theta_target = 1 - temp_ratio_target
+            
+            if theta_target <= 0:
+                return 0.0  # Core would exceed target immediately
+            
+            fourier_target = -math.log(theta_target) / (eigenvalue ** 2)
+            time_to_target = (fourier_target * (characteristic_length ** 2)) / effective_diffusivity
         
-        return time_high_hours, remaining_time
+        # Convert to hours and add safety margin (stop when core reaches 95% of target temp)
+        safe_time_hours = (time_to_target * 0.90) / 3600
+        
+        return max(0.0, safe_time_hours)
     
-    def calculate_optimal_profile(self, protein_type: str, thickness_inches: float, 
-                                target_temp: float, weight_kg: float = None) -> Dict[str, Any]:
+    def calculate_equilibration_time(self, protein_type: str, thickness_inches: float,
+                                   target_temp: float, weight_kg: float = None, 
+                                   high_phase_time: float = 0) -> float:
         """
-        Calculate optimal two-temperature cooking profile using both Gibbs and Helmholtz free energy.
-        G = U - TS + PV (Gibbs) and F = U - TS (Helmholtz) for comprehensive optimization.
+        Calculate equilibration time at target temperature after high-temp phase.
         
         Args:
             protein_type: Type of protein
             thickness_inches: Thickness in inches
             target_temp: Target temperature in Celsius
+            weight_kg: Weight of protein in kg
+            high_phase_time: Duration of high temperature phase in hours
+            
+        Returns:
+            Equilibration time in hours
+        """
+        # The high-temp phase gets us close to target, equilibration finishes the job
+        # Typically 15-30% of what the full cook time would have been
+        full_cook_time = self.calculate_sous_vide_time(protein_type, thickness_inches, target_temp, weight_kg)
+        
+        # Equilibration time depends on how much of the heating was done in high-temp phase
+        if high_phase_time > 0:
+            # Estimate how much heating was accomplished (rough approximation)
+            heating_completion = min(0.85, high_phase_time / full_cook_time * 1.5)
+            remaining_time = full_cook_time * (1 - heating_completion)
+        else:
+            remaining_time = full_cook_time
+        
+        return max(0.1, remaining_time)  # Minimum 6 minutes for final equilibration
+    
+    def calculate_sous_vide_time(self, protein_type: str, thickness_inches: float,
+                                target_temp: float, weight_kg: float = None) -> float:
+        """
+        Calculate proper sous vide cooking time where bath = target temperature.
+        Uses heat transfer physics with thermodynamic optimization.
+        
+        Args:
+            protein_type: Type of protein
+            thickness_inches: Thickness in inches
+            target_temp: Target temperature in Celsius (= bath temperature)
+            weight_kg: Weight of the protein in kilograms (optional)
+            
+        Returns:
+            Cooking time in hours
+        """
+        if protein_type not in self.protein_properties:
+            raise ValueError(f"Unknown protein type: {protein_type}")
+            
+        props = self.protein_properties[protein_type]
+        characteristic_length = (thickness_inches * 0.0254) / 2  # Convert to meters
+        
+        # Weight-based thermal mass calculations
+        if weight_kg is not None:
+            # Thermal mass = mass × specific_heat
+            thermal_mass = weight_kg * props.specific_heat
+            # Mass factor affects heating rate (larger mass takes longer)
+            mass_factor = 1.0 + (weight_kg / 1.0) ** 0.5  # More realistic scaling
+            effective_diffusivity = props.thermal_diffusivity / mass_factor
+        else:
+            # Estimate weight from dimensions
+            estimated_volume_m3 = (thickness_inches * 0.0254) * (thickness_inches * 0.0254 * 3) * (thickness_inches * 0.0254 * 2)
+            estimated_weight = estimated_volume_m3 * props.density
+            mass_factor = 1.0 + (estimated_weight / 1.0) ** 0.5
+            effective_diffusivity = props.thermal_diffusivity / mass_factor
+        
+        # Calculate Biot number for heat transfer analysis
+        h_convection = self.calculate_heat_transfer_coefficient(target_temp)
+        biot_number = (h_convection * characteristic_length) / props.thermal_conductivity
+        
+        # Calculate Fourier number for desired temperature penetration
+        # For sous vide, we want 99% of target temperature throughout (very precise)
+        if biot_number < 0.1:
+            # Lumped capacitance - uniform temperature quickly
+            fourier_target = -math.log(0.01)  # 99% of temperature difference
+        else:
+            # Use eigenvalue solution for infinite slab
+            eigenvalue = self.get_first_eigenvalue(biot_number)
+            fourier_target = -math.log(0.01) / (eigenvalue ** 2)
+        
+        # Calculate time: Fo = α*t/L²  =>  t = Fo*L²/α
+        time_seconds = (fourier_target * (characteristic_length ** 2)) / effective_diffusivity
+        time_hours = time_seconds / 3600
+        
+        return time_hours
+    
+
+
+    
+    def calculate_optimal_profile(self, protein_type: str, thickness_inches: float, 
+                                target_temp: float, weight_kg: float = None) -> Dict[str, Any]:
+        """
+        Calculate optimal two-phase sous vide cooking profile with gradient acceleration.
+        Phase 1: Higher bath temp for faster heat transfer (core never exceeds target)
+        Phase 2: Target bath temp for final equilibration
+        
+        Args:
+            protein_type: Type of protein
+            thickness_inches: Thickness in inches
+            target_temp: Target temperature in Celsius (max core temperature)
             weight_kg: Weight of the protein in kilograms (optional, improves accuracy)
             
         Returns:
-            Dictionary with optimal cooking parameters including weight effects
+            Dictionary with optimal two-phase cooking parameters
         """
-        # Optimize high temperature using Helmholtz free energy minimization
-        optimal_temp_high, optimal_duration, efficiency = self.calculate_optimal_temperature_profile(
+        # Calculate optimal two-phase profile with gradient acceleration
+        optimal_bath_temp, high_phase_time, efficiency = self.calculate_optimal_temperature_profile(
             protein_type, thickness_inches, target_temp, weight_kg
         )
         
-        # Calculate both free energy changes for the optimized profile
-        gibbs_change = self.calculate_gibbs_energy_change(20, optimal_temp_high, protein_type)
-        helmholtz_change = self.calculate_helmholtz_free_energy(target_temp, optimal_temp_high, protein_type)
-        
-        # Calculate accelerated equilibrium times with optimal temperature and weight
-        time_high, time_remaining = self.calculate_accelerated_equilibrium_time(
-            protein_type, thickness_inches, optimal_temp_high, target_temp, weight_kg
+        # Calculate equilibration time at target temperature
+        equilibration_time = self.calculate_equilibration_time(
+            protein_type, thickness_inches, target_temp, weight_kg, high_phase_time
         )
         
-        # Total time is significantly reduced due to thermodynamic optimization
+        # Calculate both free energy changes for the temperature transitions
+        gibbs_change = self.calculate_gibbs_energy_change(self.ROOM_TEMPERATURE_C, optimal_bath_temp, protein_type)
+        helmholtz_change = self.calculate_helmholtz_free_energy(self.ROOM_TEMPERATURE_C, target_temp, protein_type)
+        
+        # Two-phase cooking times
+        time_high = high_phase_time
+        time_remaining = equilibration_time
+        
+        # Total time is sum of both phases
         total_time = time_high + time_remaining
         
-        # Calculate efficiency based on time savings
+        # Calculate efficiency based on time savings from gradient acceleration
         conventional_time = self.calculate_conventional_time(protein_type, thickness_inches, target_temp)
         time_savings = max(0, (conventional_time - total_time) / conventional_time)
         
         # Calculate heat penetration metrics
         props = self.protein_properties[protein_type]
+        # High-temp phase achieves rapid initial heating, equilibration completes it
         penetration_depth = 2 * math.sqrt(props.thermal_diffusivity * time_high * 3600)
         thickness_meters = thickness_inches * 0.0254
         penetration_ratio = min(1.0, penetration_depth / thickness_meters)
@@ -419,21 +487,22 @@ class ThermodynamicCalculator:
         total_energy_kj = None
         if weight_kg is not None:
             props = self.protein_properties[protein_type]
-            # Energy = mass × specific_heat × ΔT
-            delta_t = optimal_temp_high - 20  # Assuming room temp start
+            # Energy = mass × specific_heat × ΔT (from room temp to bath temp)
+            delta_t = optimal_bath_temp - self.ROOM_TEMPERATURE_C
             total_energy_j = weight_kg * props.specific_heat * delta_t
             total_energy_kj = total_energy_j / 1000  # Convert to kJ
         
         return {
-            'high_temp_duration': time_high,  # hours
-            'remaining_time': time_remaining,  # hours  
+            'high_temp_duration': time_high,  # hours (gradient acceleration phase)
+            'remaining_time': time_remaining,  # hours (equilibration phase)
             'total_time': total_time,  # hours
             'conventional_time': conventional_time,  # hours
             'time_savings_percent': time_savings * 100,
             'penetration_ratio': penetration_ratio,
             'gibbs_energy_change': gibbs_change,
             'helmholtz_energy_change': helmholtz_change,
-            'optimal_high_temp': optimal_temp_high,
+            'optimal_high_temp': optimal_bath_temp,  # Bath temperature (not core!)
+            'target_core_temp': target_temp,  # Maximum core temperature
             'total_energy_kj': total_energy_kj,
             'efficiency': self.calculate_efficiency(protein_type, thickness_inches)
         }
@@ -547,9 +616,10 @@ class ThermodynamicCalculator:
                 'gibbs_energy_change': round(profile['gibbs_energy_change'], 1),
                 'helmholtz_energy_change': round(profile['helmholtz_energy_change'], 1),
                 'total_energy_kj': profile['total_energy_kj'],
-                'initial_temp_celsius': round(profile['optimal_high_temp'], 1),
-                'initial_temp_fahrenheit': round(profile['optimal_high_temp'] * 9/5 + 32),
-                'target_temp_fahrenheit': round(target_temp_celsius * 9/5 + 32)
+                'bath_temp_high_celsius': round(profile['optimal_high_temp'], 1),
+                'bath_temp_high_fahrenheit': round(profile['optimal_high_temp'] * 9/5 + 32),
+                'target_core_temp_celsius': target_temp_celsius,
+                'target_core_temp_fahrenheit': round(target_temp_celsius * 9/5 + 32)
             }
             
         except Exception as e:
@@ -603,6 +673,7 @@ def main():
     else:
         target_temp_celsius = target_temp
         print(f"Input: {target_temp_celsius}°C = {target_temp_celsius * 9/5 + 32:.1f}°F")
+        print(f"Starting temperature: {ThermodynamicCalculator.ROOM_TEMPERATURE_C}°C (room temperature)")
     
     calculator = ThermodynamicCalculator()
     result = calculator.calculate_cooking_parameters(
@@ -617,16 +688,19 @@ def main():
             print(f"Weight: {result['weight_kg']} kg ({result['weight_kg'] * 2.20462:.1f} lbs)")
         else:
             print(f"Weight: Estimated from dimensions")
-        print(f"Target: {result['target_temp_celsius']}°C ({result['target_temp_fahrenheit']}°F)")
+        print(f"Target: {result['target_core_temp_celsius']}°C ({result['target_core_temp_fahrenheit']}°F)")
         print(f"Doneness: {result['doneness'].title()}")
         print(f"\n--- Free Energy Analysis ---")
         print(f"Gibbs Energy Change (G=U-TS+PV): {result['gibbs_energy_change']} J/kg")
         print(f"Helmholtz Optimization (F=U-TS): Applied for temperature profile")
         if result['total_energy_kj']:
             print(f"Total Energy Required: {result['total_energy_kj']:.1f} kJ")
-        print(f"\n--- Optimized Cooking Profile ---")
-        print(f"High Temperature Phase: {result['high_temp_duration_minutes']} min at {result['initial_temp_celsius']}°C ({result['initial_temp_fahrenheit']}°F)")
-        print(f"Equilibration Phase: {result['remaining_time_minutes']} min at {result['target_temp_celsius']}°C")
+        print(f"\n--- Optimized Two-Phase Cooking Profile ---")
+        print(f"Phase 1 (Gradient Acceleration): {result['high_temp_duration_minutes']} min")
+        print(f"  Bath Temperature: {result['bath_temp_high_celsius']}°C ({result['bath_temp_high_fahrenheit']}°F)")
+        print(f"  Core Temperature: 25°C → {result['target_core_temp_celsius']}°C (NEVER exceeds target)")
+        print(f"Phase 2 (Equilibration): {result['remaining_time_minutes']} min")
+        print(f"  Bath Temperature: {result['target_core_temp_celsius']}°C (same as target core temp)")
         print(f"Total Time: {result['total_time_hours']:.2f} hours")
         print(f"Conventional Time: {result['conventional_time_hours']:.2f} hours")
         print(f"Time Savings: {result['time_savings_percent']}%")

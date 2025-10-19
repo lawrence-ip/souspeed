@@ -588,7 +588,7 @@ function getCookingSteps(proteinType, thickness, baseData, adjustedTime) {
         },
         {
             title: "Season Your Protein",
-            description: `Season your ${proteinType} with salt, pepper, and any desired herbs or spices. Let it rest at room temperature for 15-30 minutes.`,
+            description: `Season your ${proteinType} with salt, pepper, and any desired herbs or spices. Let it rest at room temperature (25°C/77°F) for 15-30 minutes to ensure even cooking. All cooking times are calculated based on this starting temperature.`,
             duration: "15-30 minutes"
         },
         {
@@ -880,3 +880,208 @@ function hideInstructions() {
         block: 'start'
     });
 }
+
+// Interactive Theory Graphs
+let temperatureChart = null;
+let energyChart = null;
+
+// Protein thermal properties (matching Python calculator)
+const proteinProperties = {
+    beef: { density: 1050, specificHeat: 3400, thermalConductivity: 0.45, thermalDiffusivity: 1.27e-7 },
+    chicken: { density: 1020, specificHeat: 3600, thermalConductivity: 0.42, thermalDiffusivity: 1.14e-7 },
+    pork: { density: 1040, specificHeat: 3500, thermalConductivity: 0.43, thermalDiffusivity: 1.18e-7 },
+    fish: { density: 980, specificHeat: 3800, thermalConductivity: 0.50, thermalDiffusivity: 1.34e-7 }
+};
+
+function initializeGraphs() {
+    // Wait for Chart.js to load
+    if (typeof Chart === 'undefined') {
+        setTimeout(initializeGraphs, 100);
+        return;
+    }
+    
+    // Initialize temperature chart
+    const tempCtx = document.getElementById('temperatureChart');
+    if (tempCtx) {
+        temperatureChart = new Chart(tempCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Core Temperature (°C)',
+                        data: [],
+                        borderColor: '#dc2626',
+                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Bath Temperature (°C)',
+                        data: [],
+                        borderColor: '#059669',
+                        backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Two-Phase Cooking Profile'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Temperature (°C)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time (minutes)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Initialize energy chart
+    const energyCtx = document.getElementById('energyChart');
+    if (energyCtx) {
+        energyChart = new Chart(energyCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Gibbs Energy (G)', 'Helmholtz Energy (F)', 'Total Energy Required'],
+                datasets: [{
+                    label: 'Energy (kJ)',
+                    data: [-9.8, -0.33, 114.2],
+                    backgroundColor: [
+                        'rgba(220, 38, 38, 0.8)',
+                        'rgba(59, 130, 246, 0.8)',
+                        'rgba(16, 185, 129, 0.8)'
+                    ],
+                    borderColor: [
+                        '#dc2626',
+                        '#3b82f6',
+                        '#10b981'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Thermodynamic Energy Analysis'
+                    }
+                },
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Energy (kJ or kJ/kg)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    updateGraph();
+}
+
+function updateGraph() {
+    const protein = document.getElementById('proteinSelect')?.value || 'beef';
+    const thickness = parseFloat(document.getElementById('thicknessSlider')?.value || 1.5);
+    const weight = parseFloat(document.getElementById('weightSlider')?.value || 0.8);
+    
+    // Update display values
+    if (document.getElementById('thicknessValue')) {
+        document.getElementById('thicknessValue').textContent = thickness + '"';
+    }
+    if (document.getElementById('weightValue')) {
+        document.getElementById('weightValue').textContent = weight + 'kg';
+    }
+    
+    // Simulate thermodynamic calculations
+    const targetTemp = getTargetTemp(protein);
+    const highTemp = targetTemp + 8; // High temperature phase
+    const props = proteinProperties[protein];
+    
+    // Calculate cooking times (simplified from Python calculator)
+    const thermalMass = weight * props.specificHeat;
+    const massFactor = 1.0 + Math.pow(weight / 2.0, 0.7);
+    const highPhaseTime = (thickness * thickness * 15 * massFactor) / (props.thermalDiffusivity * 1e7); // minutes
+    const equilibrationTime = 6; // Fixed 6 minutes
+    
+    // Generate temperature profile data
+    const timePoints = [];
+    const coreTemps = [];
+    const bathTemps = [];
+    
+    const totalTime = highPhaseTime + equilibrationTime;
+    const points = 50;
+    
+    for (let i = 0; i <= points; i++) {
+        const time = (i / points) * totalTime;
+        timePoints.push(Math.round(time));
+        
+        if (time <= highPhaseTime) {
+            // High temperature phase
+            bathTemps.push(highTemp);
+            const progress = time / highPhaseTime;
+            const coreTemp = 25 + (highTemp - 25) * (1 - Math.exp(-progress * 3));
+            coreTemps.push(Math.round(coreTemp * 10) / 10);
+        } else {
+            // Equilibration phase
+            bathTemps.push(targetTemp);
+            const equilibrationProgress = (time - highPhaseTime) / equilibrationTime;
+            const startTemp = highTemp * 0.9; // Core was at ~90% of bath temp
+            const coreTemp = startTemp - (startTemp - targetTemp) * equilibrationProgress;
+            coreTemps.push(Math.round(coreTemp * 10) / 10);
+        }
+    }
+    
+    // Update temperature chart
+    if (temperatureChart) {
+        temperatureChart.data.labels = timePoints;
+        temperatureChart.data.datasets[0].data = coreTemps;
+        temperatureChart.data.datasets[1].data = bathTemps;
+        temperatureChart.update();
+    }
+    
+    // Calculate free energies (simplified)
+    const deltaT = highTemp - 25;
+    const gibbsEnergy = -(props.specificHeat * deltaT * Math.log((highTemp + 273.15) / (25 + 273.15))) / 1000; // kJ/kg
+    const helmholtzEnergy = gibbsEnergy * 0.034; // Simplified relationship
+    const totalEnergy = weight * props.specificHeat * deltaT / 1000; // kJ
+    
+    // Update energy chart
+    if (energyChart) {
+        energyChart.data.datasets[0].data = [gibbsEnergy, helmholtzEnergy, totalEnergy];
+        energyChart.update();
+    }
+}
+
+function getTargetTemp(protein) {
+    const temps = {
+        beef: 54,
+        chicken: 65,
+        pork: 60,
+        fish: 52
+    };
+    return temps[protein] || 54;
+}
+
+// Initialize graphs when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Delay initialization to ensure Chart.js is loaded
+    setTimeout(initializeGraphs, 500);
+});

@@ -209,8 +209,21 @@ body {
     text-align: center;
     font-size: 2.5rem;
     font-weight: 700;
-    margin-bottom: 3rem;
+    margin-bottom: 1rem;
     color: #1f2937;
+}
+
+.section-subtitle {
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-bottom: 2rem;
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.1);
+    padding: 0.75rem 1.5rem;
+    border-radius: 25px;
+    display: inline-block;
+    border: 1px solid rgba(220, 38, 38, 0.2);
 }
 
 .features-grid {
@@ -804,6 +817,111 @@ body {
     color: #9ca3af;
 }
 
+/* Theory Section */
+.theory-section {
+    padding: 80px 0;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.theory-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    margin-top: 3rem;
+}
+
+.theory-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.theory-card {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid #dc2626;
+}
+
+.theory-card h3 {
+    color: #dc2626;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.theory-card ul {
+    margin-left: 1rem;
+    margin-top: 0.5rem;
+}
+
+.theory-card li {
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+
+.theory-card strong {
+    color: #dc2626;
+}
+
+.theory-graphs {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.graph-container {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.graph-container h4 {
+    color: #dc2626;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.graph-controls {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.graph-controls label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.graph-controls select,
+.graph-controls input[type="range"] {
+    padding: 0.25rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.graph-controls input[type="range"] {
+    width: 100px;
+}
+
+.graph-controls span {
+    font-weight: 600;
+    color: #dc2626;
+    min-width: 40px;
+    text-align: center;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .nav-menu {
@@ -898,6 +1016,11 @@ body {
 
     .pricing-grid {
         grid-template-columns: 1fr;
+    }
+
+    .theory-content {
+        grid-template-columns: 1fr;
+        gap: 2rem;
     }
 
     .instructions-container {
