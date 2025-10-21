@@ -1063,21 +1063,21 @@ function updateGraph() {
         timePoints.push(Math.round(time));
         
         if (time <= highPhaseTime) {
-            // High temperature phase - Core NEVER exceeds target temperature
+            // High temperature phase - Only 80% of cooking progress
             bathTemps.push(highTemp);
             const progress = time / highPhaseTime;
-            // Core approaches target temperature but never exceeds it
-            const maxCoreReach = targetTemp * 0.98; // 98% of target max
-            const coreTemp = 25 + (maxCoreReach - 25) * (1 - Math.exp(-progress * 2.5));
-            coreTemps.push(Math.min(targetTemp, Math.round(coreTemp * 10) / 10));
+            // Core reaches only 80% of target temperature during high-temp phase
+            const temp_rise_80_percent = (targetTemp - 25) * 0.80;
+            const high_phase_target = 25 + temp_rise_80_percent;
+            const coreTemp = 25 + temp_rise_80_percent * (1 - Math.exp(-progress * 2.5));
+            coreTemps.push(Math.round(coreTemp * 10) / 10);
         } else {
-            // Equilibration phase - Core reaches exactly target temperature
+            // Equilibration phase - Complete remaining 20% of cooking
             bathTemps.push(targetTemp);
             const equilibrationProgress = (time - highPhaseTime) / equilibrationTime;
-            const startTemp = targetTemp * 0.98; // Start from 98% of target
+            const startTemp = 25 + (targetTemp - 25) * 0.80; // Start from 80% of target
             const coreTemp = startTemp + (targetTemp - startTemp) * equilibrationProgress;
-            // Ensure core never exceeds target, even during equilibration
-            coreTemps.push(Math.min(targetTemp, Math.round(coreTemp * 10) / 10));
+            coreTemps.push(Math.round(coreTemp * 10) / 10);
         }
     }
     

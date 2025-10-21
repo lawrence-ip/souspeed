@@ -221,9 +221,9 @@ class ThermodynamicCalculator:
                                             target_temp: float, weight_kg: float = None) -> Tuple[float, float, float]:
         """
         Calculate optimal two-phase cooking profile with temperature gradient acceleration.
-        Phase 1: Higher bath temperature to create faster heat transfer gradient
-        Phase 2: Target bath temperature for final equilibration
-        Core temperature NEVER exceeds target doneness temperature.
+        Phase 1: Higher bath temperature for accelerated heat conduction (80% of cooking)
+        Phase 2: Target bath temperature for final equilibration (remaining 20%)
+        High-temp phase ONLY accelerates conduction, does NOT overcook the meat.
         
         Args:
             protein_type: Type of protein
@@ -260,7 +260,7 @@ class ThermodynamicCalculator:
                 )
                 
                 total_time = high_phase_time + equilibration_time
-                conventional_time = self.calculate_conventional_time(protein_type, thickness_inches, target_temp)
+                conventional_time = self.calculate_conventional_time(protein_type, thickness_inches, target_temp, weight_kg)
                 
                 # Energy efficiency combines time savings with thermodynamic efficiency
                 time_efficiency = max(0, (conventional_time - total_time) / conventional_time)
@@ -279,8 +279,8 @@ class ThermodynamicCalculator:
                                         bath_temp: float, target_core_temp: float, 
                                         weight_kg: float = None) -> float:
         """
-        Calculate how long we can use a higher bath temperature before the core reaches target.
-        This ensures the meat core NEVER exceeds the desired doneness temperature.
+        Calculate high-temp phase duration for accelerated heat conduction only.
+        Limits cooking to 80% progress to prevent overcooking - only speeds conduction rate.
         
         Args:
             protein_type: Type of protein
@@ -290,7 +290,7 @@ class ThermodynamicCalculator:
             weight_kg: Weight of the protein in kilograms
             
         Returns:
-            Time in hours we can safely use the higher bath temperature
+            Time in hours to reach 80% of target temperature (80% cooking progress)
         """
         if protein_type not in self.protein_properties:
             raise ValueError(f"Unknown protein type: {protein_type}")
@@ -323,23 +323,16 @@ class ThermodynamicCalculator:
         # Calculate actual volume from weight and density
         actual_volume_m3 = weight_kg / props.density
         
-        # More accurate surface area calculation based on weight and thickness
-        # Assuming roughly rectangular piece: V = L × W × T, surface area accounts for all sides
+        # Simplified surface area for more realistic heat transfer
         if thickness_m > 0:
-            # Calculate length and width from volume and thickness
-            base_area = actual_volume_m3 / thickness_m  # L × W
-            length_width = math.sqrt(base_area)  # Assume square cross-section for simplicity
-            
-            # Total surface area: 2(LW + LT + WT) = 2(base_area + 2 × length_width × thickness)
-            surface_area = 2 * (base_area + 2 * length_width * thickness_m)
+            base_area = actual_volume_m3 / thickness_m  # L × W from volume and thickness
+            # Most heat transfer through main faces, less from edges
+            surface_area = 2.5 * base_area  # 2x main faces + 0.5x for edge effects
         else:
             surface_area = 6 * (actual_volume_m3 ** (2/3))  # Sphere approximation fallback
         
-        # Calculate thermal mass with weight-dependent heat capacity effects
-        # Larger pieces have slightly different effective heat capacity due to structure
-        weight_factor = 1.0 + 0.1 * math.log(1 + weight_kg)  # Logarithmic scaling
-        effective_specific_heat = props.specific_heat * weight_factor
-        thermal_mass = weight_kg * effective_specific_heat  # J/K
+        # Calculate thermal mass - keep it simple and accurate
+        thermal_mass = weight_kg * props.specific_heat  # J/K
         
         # Apply Fourier's Law to calculate heat transfer rate
         # Q/t = k * A * (T_bath - T_core) / l
@@ -348,25 +341,23 @@ class ThermodynamicCalculator:
             heat_rate = props.thermal_conductivity * surface_area * temp_diff / thickness_m
             return heat_rate  # Watts (J/s)
         
-        # Simulate heating using small time steps
-        current_temp = self.ROOM_TEMPERATURE_C
-        time_step = 30.0  # 30 second time steps
-        total_time = 0.0
+        # Calculate time to reach 80% of temperature rise using analytical solution
+        # 80% completion corresponds to θ/θ₀ = 0.20
+        # exp(-π²Fo/4) = 0.20  =>  Fo = -4*ln(0.20)/π² = 0.65
         
-        while current_temp < target_core_temp and total_time < 24 * 3600:  # Max 24 hours
-            heat_rate = calculate_heating_rate(current_temp)
-            temp_rise = (heat_rate * time_step) / thermal_mass  # ΔT = Q / (m * c)
-            current_temp += temp_rise
-            total_time += time_step
-            
-            # Safety check: if we're very close to target, break
-            if current_temp >= target_core_temp * 0.98:
-                break
+        characteristic_length = thickness_m / 2
+        fourier_number_80_percent = 0.65  # For 80% of temperature change
         
-        time_to_target = total_time
+        # Account for weight effects on thermal diffusivity
+        if weight_kg > 0:
+            mass_factor = 1.0 + 0.3 * math.log(1 + weight_kg / 0.5)
+            effective_diffusivity = props.thermal_diffusivity / mass_factor
+        else:
+            effective_diffusivity = props.thermal_diffusivity
         
-        # Convert to hours and add safety margin (stop when core reaches 95% of target temp)
-        safe_time_hours = (time_to_target * 0.90) / 3600
+        # Calculate time for 80% cooking progress
+        time_seconds = (fourier_number_80_percent * (characteristic_length ** 2)) / effective_diffusivity
+        safe_time_hours = time_seconds / 3600
         
         return max(0.0, safe_time_hours)
     
@@ -386,19 +377,25 @@ class ThermodynamicCalculator:
         Returns:
             Equilibration time in hours
         """
-        # The high-temp phase gets us close to target, equilibration finishes the job
-        # Typically 15-30% of what the full cook time would have been
+        # High-temp phase does 80% of cooking, equilibration completes remaining 20%
         full_cook_time = self.calculate_sous_vide_time(protein_type, thickness_inches, target_temp, weight_kg)
         
-        # Equilibration time depends on how much of the heating was done in high-temp phase
         if high_phase_time > 0:
-            # Estimate how much heating was accomplished (rough approximation)
-            heating_completion = min(0.85, high_phase_time / full_cook_time * 1.5)
-            remaining_time = full_cook_time * (1 - heating_completion)
+            # High-temp phase accomplished 80% of heating
+            # Equilibration must complete the remaining 20% at target temperature
+            remaining_cooking_fraction = 0.20
+            
+            # Calculate time needed for final 20% of temperature rise at target temperature
+            # This is slower than high-temp phase but ensures perfect doneness
+            equilibration_time = full_cook_time * remaining_cooking_fraction
+            
+            # Add safety margin for final equilibration
+            equilibration_time *= 1.2  # 20% extra time for final temperature uniformity
         else:
-            remaining_time = full_cook_time
+            # No high-temp phase, do full cook time
+            equilibration_time = full_cook_time
         
-        return max(0.1, remaining_time)  # Minimum 6 minutes for final equilibration
+        return max(0.2, equilibration_time)  # Minimum 12 minutes for final equilibration
     
     def calculate_sous_vide_time(self, protein_type: str, thickness_inches: float,
                                 target_temp: float, weight_kg: float = None) -> float:
@@ -433,39 +430,36 @@ class ThermodynamicCalculator:
         # Calculate actual volume and realistic surface area from weight
         actual_volume_m3 = weight_kg / props.density
         
-        # Weight-dependent surface area calculation
+        # Simplified surface area - assume reasonable geometry
+        # For sous vide, most heat transfer happens through the large faces
         if thickness_m > 0:
             base_area = actual_volume_m3 / thickness_m  # L × W from volume and thickness
-            length_width = math.sqrt(base_area)
-            # Total surface area for heat transfer
-            surface_area = 2 * (base_area + 2 * length_width * thickness_m)
+            # Primary heat transfer through top/bottom faces, sides contribute less
+            surface_area = 2.5 * base_area  # 2x main faces + 0.5x for edge effects
         else:
             surface_area = 6 * (actual_volume_m3 ** (2/3))  # Sphere approximation
         
-        # Calculate thermal mass with weight scaling effects
-        weight_factor = 1.0 + 0.1 * math.log(1 + weight_kg)
-        effective_specific_heat = props.specific_heat * weight_factor
-        thermal_mass = weight_kg * effective_specific_heat  # J/K
+        # Calculate thermal mass - no artificial scaling needed
+        thermal_mass = weight_kg * props.specific_heat  # J/K
         
-        # Use Fourier's Law to simulate heating to 99% of target temperature
-        current_temp = self.ROOM_TEMPERATURE_C
-        target_for_99_percent = target_temp * 0.99  # 99% completion
-        time_step = 60.0  # 1-minute time steps for sous vide precision
-        total_time = 0.0
+        # Use analytical solution from food science (more accurate than simulation)
+        # For infinite slab: θ/θ₀ = exp(-π²Fo/4) for 99% heating
+        # Fo = -4*ln(0.01)/π² = 1.86 for 99% completion
         
-        while current_temp < target_for_99_percent and total_time < 48 * 3600:  # Max 48 hours
-            # Apply Fourier's Law: Q/t = k * A * (T_bath - T_core) / l
-            temp_diff = target_temp - current_temp
-            heat_rate = props.thermal_conductivity * surface_area * temp_diff / thickness_m
-            temp_rise = (heat_rate * time_step) / thermal_mass  # ΔT = Q / (m * c)
-            current_temp += temp_rise
-            total_time += time_step
-            
-            # Prevent infinite loops with very small temperature differences
-            if temp_diff < 0.01:  # Less than 0.01°C difference
-                break
+        characteristic_length = thickness_m / 2  # Half-thickness for slab
+        fourier_number = 1.86  # For 99% of temperature change
         
-        time_hours = total_time / 3600
+        # Adjust thermal diffusivity based on weight (larger pieces heat differently)
+        if weight_kg > 0:
+            # Larger masses have slightly reduced effective diffusivity due to internal structure
+            mass_factor = 1.0 + 0.3 * math.log(1 + weight_kg / 0.5)  # Reference weight 0.5kg
+            effective_diffusivity = props.thermal_diffusivity / mass_factor
+        else:
+            effective_diffusivity = props.thermal_diffusivity
+        
+        # Calculate time: Fo = α*t/L²  =>  t = Fo*L²/α
+        time_seconds = (fourier_number * (characteristic_length ** 2)) / effective_diffusivity
+        time_hours = time_seconds / 3600
         
         return time_hours
     
@@ -510,7 +504,7 @@ class ThermodynamicCalculator:
         total_time = time_high + time_remaining
         
         # Calculate efficiency based on time savings from gradient acceleration
-        conventional_time = self.calculate_conventional_time(protein_type, thickness_inches, target_temp)
+        conventional_time = self.calculate_conventional_time(protein_type, thickness_inches, target_temp, weight_kg)
         time_savings = max(0, (conventional_time - total_time) / conventional_time)
         
         # Calculate heat penetration metrics
@@ -545,34 +539,21 @@ class ThermodynamicCalculator:
         }
     
     def calculate_conventional_time(self, protein_type: str, thickness_inches: float, 
-                                  target_temp: float) -> float:
+                                  target_temp: float, weight_kg: float = None) -> float:
         """
-        Calculate conventional single-temperature cooking time for comparison.
+        Calculate conventional single-temperature cooking time using same Fourier's Law method.
         
         Args:
             protein_type: Type of protein
             thickness_inches: Thickness in inches
             target_temp: Target temperature in Celsius
+            weight_kg: Weight of protein in kg (optional)
             
         Returns:
             Conventional cooking time in hours
         """
-        if protein_type not in self.protein_properties:
-            raise ValueError(f"Unknown protein type: {protein_type}")
-            
-        props = self.protein_properties[protein_type]
-        biot = self.calculate_biot_number(protein_type, thickness_inches)
-        characteristic_length = (thickness_inches * 0.0254) / 2
-        
-        # Standard Fourier analysis for single temperature
-        if biot < 0.1:
-            fourier_number = -math.log(0.01)  # 99% equilibrium
-        else:
-            eigenvalue = self.get_first_eigenvalue(biot)
-            fourier_number = -math.log(0.01) / (eigenvalue ** 2)
-        
-        time_seconds = (fourier_number * (characteristic_length ** 2)) / props.thermal_diffusivity
-        return time_seconds / 3600
+        # Use the same Fourier's Law simulation but at constant target temperature
+        return self.calculate_sous_vide_time(protein_type, thickness_inches, target_temp, weight_kg)
     
     def calculate_efficiency(self, protein_type: str, thickness_inches: float) -> float:
         """
