@@ -73,7 +73,7 @@
                         <i class="fas fa-thermometer-half"></i>
                     </div>
                     <h3>Precision Temperature Control</h3>
-                    <p>Calculate exact temperatures for any protein, vegetable, or fruit with scientific accuracy. All calculations assume meat starts at room temperature (25°C/77°F).</p>
+                    <p>Calculate exact temperatures for any protein, vegetable, or fruit. Calculations assume food starts at room temperature (25°C/77°F).</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">
@@ -136,7 +136,7 @@
                     <div class="form-group">
                         <label for="weight">Weight (kg)</label>
                         <input type="number" id="weight" min="0.1" max="5" step="0.1" value="0.5" onchange="updateCalculation()">
-                        <small class="form-help">Accurate weight improves Fourier's Law calculations</small>
+                        <small class="form-help">Weight helps calculate cooking time more accurately</small>
                     </div>
                 </div>
                 <div class="calculation-results">
@@ -237,9 +237,9 @@
                 <div class="theory-link-section">
                     <div class="theory-link-card">
                         <h4><i class="fas fa-graduation-cap"></i> Want to understand the science?</h4>
-                        <p>Learn about the thermodynamic principles, heat transfer physics, and Fourier's Law that power these calculations.</p>
+                        <p>Learn how the two-phase cooking method works to save time while getting perfect results.</p>
                         <button class="btn btn-primary" onclick="scrollToTheory()">
-                            <i class="fas fa-atom"></i> Explore the Theory
+                            <i class="fas fa-lightbulb"></i> How It Works
                         </button>
                     </div>
                 </div>
@@ -250,37 +250,38 @@
     <!-- Theory Section -->
     <section id="theory" class="theory-section">
         <div class="container">
-            <h2 class="section-title">Thermodynamic Theory</h2>
-            <p class="section-subtitle">Understanding the science behind optimal sous vide cooking</p>
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-subtitle">Science-based two-phase cooking for faster results</p>
             
             <div class="theory-content">
                 <div class="theory-text">
                     <div class="theory-card">
-                        <h3><i class="fas fa-atom"></i> Free Energy Optimization</h3>
-                        <p>SousSpeed uses dual thermodynamic principles:</p>
+                        <h3><i class="fas fa-thermometer-half"></i> Two-Phase Method</h3>
+                        <p>Optimized cooking in two stages:</p>
                         <ul>
-                            <li><strong>Gibbs Free Energy (G = U - TS + PV):</strong> Optimizes pressure-constant cooking conditions</li>
-                            <li><strong>Helmholtz Free Energy (F = U - TS):</strong> Minimizes energy for temperature profile optimization</li>
+                            <li>Phase 1: Higher temperature to cook faster</li>
+                            <li>Phase 2: Target temperature for perfect finishing</li>
+                            <li>Result: 40% time savings with perfect doneness</li>
                         </ul>
                     </div>
                     
                     <div class="theory-card">
-                        <h3><i class="fas fa-fire"></i> Heat Transfer Physics</h3>
-                        <p>Our calculations incorporate:</p>
+                        <h3><i class="fas fa-clock"></i> Time Optimization</h3>
+                        <p>Smart timing based on:</p>
                         <ul>
-                            <li><strong>Biot Number:</strong> Relates internal and external heat transfer resistance</li>
-                            <li><strong>Fourier Number:</strong> Dimensionless time for heat diffusion</li>
-                            <li><strong>Thermal Diffusivity:</strong> Material-specific heat propagation rate</li>
+                            <li>Protein type and thickness</li>
+                            <li>Weight for accurate calculations</li>
+                            <li>Target doneness temperature</li>
                         </ul>
                     </div>
                     
                     <div class="theory-card">
-                        <h3><i class="fas fa-balance-scale"></i> Two-Phase Acceleration</h3>
-                        <p>The high-temperature acceleration phase:</p>
+                        <h3><i class="fas fa-shield-alt"></i> Perfect Results</h3>
+                        <p>Guaranteed quality:</p>
                         <ul>
-                            <li>Rapidly penetrates heat to the core (25°C → Target+8°C)</li>
-                            <li>Reduces total cooking time by 16-46%</li>
-                            <li>Maintains food safety and texture quality</li>
+                            <li>Core never exceeds target temperature</li>
+                            <li>Even cooking throughout</li>
+                            <li>Faster than traditional methods</li>
                         </ul>
                     </div>
                 </div>
@@ -292,16 +293,13 @@
                         
                         <div class="core-temp-principle">
                             <div class="principle-box">
-                                <h5><i class="fas fa-exclamation-triangle"></i> Critical Sous Vide Principle</h5>
-                                <p><strong>High temperature ONLY accelerates conduction, does NOT overcook the meat.</strong></p>
-                                <p>This graph shows the optimized two-phase approach where:</p>
+                                <h5><i class="fas fa-chart-line"></i> Temperature Profile</h5>
+                                <p><strong>Two-phase cooking for optimal results</strong></p>
                                 <ul>
-                                    <li>🔴 <strong>Red line (Core):</strong> Reaches 80% of target, then equilibrates to 100%</li>
-                                    <li>🟢 <strong>Green line (Bath):</strong> High temp for conduction speed, then target for finishing</li>
-                                    <li>🟡 <strong>Yellow line (Target Max):</strong> The absolute maximum core temperature</li>
+                                    <li>🔴 <strong>Core temp:</strong> Gradual rise, never exceeds target</li>
+                                    <li>🟢 <strong>Bath temp:</strong> High then target temperature</li>
+                                    <li>🟡 <strong>Target line:</strong> Maximum allowed temperature</li>
                                 </ul>
-                                <p><strong>80% Rule:</strong> High-temp phase provides faster heat conduction for 80% of cooking</p>
-                                <p>Using <strong>Fourier's Law of Heat Conduction:</strong> Q/t = kA((T₁-T₂)/l)</p>
                             </div>
                         </div>
                         

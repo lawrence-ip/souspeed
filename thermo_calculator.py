@@ -28,6 +28,7 @@ class WaterProperties:
     thermal_conductivity: float = 0.65  # W/(m·K)
 
 
+
 class ThermodynamicCalculator:
     """
     Advanced thermodynamic calculator for sous vide cooking optimization.
