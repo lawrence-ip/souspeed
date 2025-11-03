@@ -1,79 +1,3 @@
-// Firebase Configuration and Authentication
-let firebaseApp = null;
-let auth = null;
-let currentUser = null;
-
-// Initialize Firebase when DOM is ready
-document.addEventListener('DOMContentLoaded', async function() {
-    await initializeFirebase();
-});
-
-async function initializeFirebase() {
-    try {
-        // Get Firebase config from server
-        const response = await fetch('/api/auth/firebase-config');
-        const data = await response.json();
-        
-        if (data.success && data.config) {
-            // Initialize Firebase
-            firebaseApp = firebase.initializeApp(data.config);
-            auth = firebase.auth();
-            
-            // Set up auth state listener
-            auth.onAuthStateChanged(async (user) => {
-                if (user) {
-                    // User is signed in
-                    currentUser = user;
-                    await verifyAndUpdateUserProfile(user);
-                } else {
-                    // User is signed out
-                    currentUser = null;
-                    updateAuthUI(null, null);
-                }
-            });
-            
-            console.log('Firebase initialized successfully');
-        } else {
-            console.error('Failed to get Firebase config:', data.error);
-        }
-    } catch (error) {
-        console.error('Firebase initialization error:', error);
-    }
-}
-
-async function verifyAndUpdateUserProfile(user) {
-    try {
-        const idToken = await user.getIdToken();
-        
-        const response = await fetch('/api/auth/verify-token', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ idToken })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Update current plan based on subscription
-            if (data.subscription && data.subscription.has_access) {
-                currentPlan = 'pro';
-            } else {
-                currentPlan = 'free';
-            }
-            
-            // Update UI
-            updateAuthUI(data.user, data.subscription);
-        } else {
-            console.error('Token verification failed:', data.error);
-            await signOut();
-        }
-    } catch (error) {
-        console.error('Profile verification error:', error);
-    }
-}
-
 // Mobile navigation toggle
 const mobileMenu = document.getElementById('mobile-menu');
 const navMenu = document.querySelector('.nav-menu');
@@ -267,46 +191,24 @@ async function updateCalculationFallback() {
 
 // Fetch calculations from Python API
 async function fetchThermodynamicCalculation(proteinType, thicknessInches, targetTempC, doneness, weightKg) {
-    const apiUrl = '/api/calculate';
+    const apiUrl = 'http://localhost:8080/api/calculate';
     
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getAuthHeaders()
-            },
-            body: JSON.stringify({
-                protein_type: proteinType,
-                thickness_inches: thicknessInches,
-                target_temp_celsius: targetTempC,
-                doneness: doneness,
-                weight_kg: weightKg
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            // Handle authentication/authorization errors
-            if (response.status === 401 || response.status === 403) {
-                if (data.requires_upgrade) {
-                    // Show upgrade modal for premium protein
-                    showUpgradeModalForProtein(data.protein_type);
-                    throw new Error(`Pro Chef subscription required for ${data.protein_type}`);
-                } else {
-                    // Show login modal
-                    showLoginModal(proteinType);
-                    throw new Error('Authentication required');
-                }
-            }
-            throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        return data;
-    } catch (error) {
-        console.error('API Error:', error);
-        throw error;
+    const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            protein_type: proteinType,
+            thickness_inches: thicknessInches,
+            target_temp_celsius: targetTempC,
+            doneness: doneness,
+            weight_kg: weightKg
+        })
+    });
+    
+    if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
     }
     
     return await response.json();
@@ -1364,30 +1266,22 @@ function showForgotPassword() {
     });
 }
 
-async function handleLogin(event) {
+function handleLogin(event) {
     event.preventDefault();
     
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
     
-    if (!email || !password) {
-        showErrorMessage('Please enter both email and password');
-        return;
-    }
-    
+    // Simulate login process
     showLoading('Signing you in...');
     
-    try {
-        if (!auth) {
-            throw new Error('Firebase not initialized');
-        }
-        
-        // Sign in with Firebase
-        const userCredential = await auth.signInWithEmailAndPassword(email, password);
-        const user = userCredential.user;
-        
+    setTimeout(() => {
+        // Simulate successful login
+        currentPlan = 'pro';
         hideLoading();
-        showSuccessMessage(`Welcome back, ${user.displayName || 'Pro Chef'}! Features unlocked.`);
+        
+        // Show success message
+        showSuccessMessage('Welcome back! Pro Chef features unlocked.');
         
         // Close modal
         closeLoginModal();
@@ -1398,35 +1292,12 @@ async function handleLogin(event) {
             window.pendingProteinSelection = null;
         }
         
-        // Auth state change will handle UI updates automatically
-        
-    } catch (error) {
-        hideLoading();
-        
-        let errorMessage = 'Login failed';
-        switch (error.code) {
-            case 'auth/user-not-found':
-                errorMessage = 'No account found with this email';
-                break;
-            case 'auth/wrong-password':
-                errorMessage = 'Incorrect password';
-                break;
-            case 'auth/invalid-email':
-                errorMessage = 'Invalid email address';
-                break;
-            case 'auth/too-many-requests':
-                errorMessage = 'Too many failed attempts. Please try again later';
-                break;
-            default:
-                errorMessage = error.message || 'Login failed';
-        }
-        
-        showErrorMessage(errorMessage);
-        console.error('Login error:', error);
-    }
+        // Update UI to reflect pro status
+        updatePlanUI();
+    }, 1500);
 }
 
-async function handleSignup(event) {
+function handleSignup(event) {
     event.preventDefault();
     
     const name = document.getElementById('signupName').value;
@@ -1434,125 +1305,48 @@ async function handleSignup(event) {
     const password = document.getElementById('signupPassword').value;
     const confirm = document.getElementById('signupConfirm').value;
     
-    if (!name || !email || !password || !confirm) {
-        showErrorMessage('Please fill in all fields');
-        return;
-    }
-    
     if (password !== confirm) {
         showErrorMessage('Passwords do not match');
         return;
     }
     
-    if (password.length < 6) {
-        showErrorMessage('Password must be at least 6 characters');
-        return;
-    }
+    // Simulate signup process
+    showLoading('Creating your Pro Chef account...');
     
-    showLoading('Creating your account...');
-    
-    try {
-        if (!auth) {
-            throw new Error('Firebase not initialized');
-        }
-        
-        // Create user with Firebase
-        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-        const user = userCredential.user;
-        
-        // Update user profile with display name
-        await user.updateProfile({
-            displayName: name
-        });
-        
+    setTimeout(() => {
+        // Simulate successful signup with trial
+        currentPlan = 'pro';
         hideLoading();
-        showSuccessMessage(`Welcome to SousSpeed, ${name}! Your account has been created.`);
         
-        // Close modal and show upgrade option
+        // Show success message
+        showSuccessMessage(`Welcome ${name}! Your 7-day FREE trial has started.`);
+        
+        // Close modal
         closeLoginModal();
-        setTimeout(() => {
-            showUpgradeModal();
-        }, 1000);
         
-        // Auth state change will handle UI updates automatically
-        
-    } catch (error) {
-        hideLoading();
-        
-        let errorMessage = 'Account creation failed';
-        switch (error.code) {
-            case 'auth/email-already-in-use':
-                errorMessage = 'An account with this email already exists';
-                break;
-            case 'auth/invalid-email':
-                errorMessage = 'Invalid email address';
-                break;
-            case 'auth/weak-password':
-                errorMessage = 'Password is too weak';
-                break;
-            default:
-                errorMessage = error.message || 'Account creation failed';
+        // If there was a pending protein selection, activate it
+        if (window.pendingProteinSelection) {
+            selectProtein(window.pendingProteinSelection);
+            window.pendingProteinSelection = null;
         }
         
-        showErrorMessage(errorMessage);
-        console.error('Signup error:', error);
-    }
+        // Update UI to reflect pro status
+        updatePlanUI();
+    }, 2000);
 }
 
-async function handleForgotPassword(event) {
+function handleForgotPassword(event) {
     event.preventDefault();
     
     const email = document.getElementById('forgotEmail').value;
     
-    if (!email) {
-        showErrorMessage('Please enter your email address');
-        return;
-    }
-    
     showLoading('Sending reset link...');
     
-    try {
-        if (!auth) {
-            throw new Error('Firebase not initialized');
-        }
-        
-        await auth.sendPasswordResetEmail(email);
-        
+    setTimeout(() => {
         hideLoading();
         showSuccessMessage('Password reset link sent to your email');
         switchTab('login');
-        
-    } catch (error) {
-        hideLoading();
-        
-        let errorMessage = 'Failed to send reset email';
-        switch (error.code) {
-            case 'auth/user-not-found':
-                errorMessage = 'No account found with this email address';
-                break;
-            case 'auth/invalid-email':
-                errorMessage = 'Invalid email address';
-                break;
-            default:
-                errorMessage = error.message || 'Failed to send reset email';
-        }
-        
-        showErrorMessage(errorMessage);
-        console.error('Password reset error:', error);
-    }
-}
-
-function updateAuthUI(user, subscription) {
-    // Update plan status
-    if (subscription && subscription.has_access) {
-        currentPlan = 'pro';
-        updatePlanUI();
-    } else {
-        currentPlan = 'free';
-    }
-    
-    // Update navigation or add logout option
-    // This can be expanded to show user name, logout button, etc.
+    }, 1500);
 }
 
 function updatePlanUI() {
@@ -1566,75 +1360,6 @@ function updatePlanUI() {
                 small.style.color = '#059669';
             }
         });
-    }
-}
-
-async function getAuthHeaders() {
-    if (currentUser) {
-        try {
-            const idToken = await currentUser.getIdToken();
-            return { 'Authorization': `Bearer ${idToken}` };
-        } catch (error) {
-            console.error('Error getting ID token:', error);
-        }
-    }
-    return {};
-}
-
-function isAuthenticated() {
-    return !!currentUser;
-}
-
-async function signOut() {
-    try {
-        if (auth) {
-            await auth.signOut();
-        }
-        currentUser = null;
-        currentPlan = 'free';
-        
-        // Clear any cached data
-        localStorage.removeItem('user_data');
-        
-        // Update UI
-        updateAuthUI(null, null);
-        
-    } catch (error) {
-        console.error('Sign out error:', error);
-    }
-}
-
-async function showUpgradeModal() {
-    // Create upgrade modal for new users
-    if (isAuthenticated()) {
-        try {
-            const authHeaders = await getAuthHeaders();
-            const response = await fetch('/api/payment/create-checkout', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...authHeaders
-                },
-                body: JSON.stringify({
-                    plan_type: 'pro_chef',
-                    trial_days: 7
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (response.ok && data.success) {
-                // Redirect to Stripe Checkout
-                window.location.href = data.checkout_url;
-            } else {
-                showErrorMessage('Failed to create checkout session');
-            }
-        } catch (error) {
-            showErrorMessage('Network error during checkout');
-            console.error('Checkout error:', error);
-        }
-    } else {
-        showLoginModal();
     }
 }
 
@@ -1746,34 +1471,8 @@ document.addEventListener('keydown', function(event) {
     }
 });
 
-function showUpgradeModalForProtein(proteinType) {
-    const proteinNames = {
-        chicken: 'Chicken',
-        pork: 'Pork', 
-        fish: 'Fish',
-        vegetables: 'Vegetables'
-    };
-    
-    const upgradeMessage = `${proteinNames[proteinType]} calculations require Pro Chef subscription. Would you like to upgrade?`;
-    
-    if (confirm(upgradeMessage)) {
-        if (isAuthenticated()) {
-            showUpgradeModal();
-        } else {
-            showLoginModal(proteinType);
-        }
-    }
-}
-
-// Initialize authentication state on page load
+// Initialize graphs when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    // Clear any old authentication data
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_data');
-    
-    // Firebase initialization will handle auth state
-    console.log('Page loaded, Firebase auth will handle authentication state');
-    
     // Delay initialization to ensure Chart.js is loaded
     setTimeout(initializeGraphs, 500);
 });
