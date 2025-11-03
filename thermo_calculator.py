@@ -263,11 +263,18 @@ class ThermodynamicCalculator:
                 total_time = high_phase_time + equilibration_time
                 conventional_time = self.calculate_conventional_time(protein_type, thickness_inches, target_temp, weight_kg)
                 
-                # Energy efficiency combines time savings with thermodynamic efficiency
+                # Account for water reheating energy cost in efficiency calculation
+                cold_water_temp = 20.0
+                water_mix_ratio = 0.5
+                mixed_temp = (test_bath_temp * (1 - water_mix_ratio)) + (cold_water_temp * water_mix_ratio)
+                water_reheat_energy_penalty = (target_temp - mixed_temp) / temp_delta  # Energy cost ratio
+                
+                # Energy efficiency combines time savings with thermodynamic efficiency and water heating cost
                 time_efficiency = max(0, (conventional_time - total_time) / conventional_time)
                 energy_efficiency = abs(helmholtz_change) / (props.specific_heat * temp_delta)
+                water_efficiency = max(0.5, 1.0 - water_reheat_energy_penalty * 0.3)  # Penalty for water reheating
                 
-                combined_efficiency = time_efficiency * energy_efficiency
+                combined_efficiency = time_efficiency * energy_efficiency * water_efficiency
                 
                 if combined_efficiency > best_efficiency:
                     best_efficiency = combined_efficiency
@@ -366,7 +373,8 @@ class ThermodynamicCalculator:
                                    target_temp: float, weight_kg: float = None, 
                                    high_phase_time: float = 0) -> float:
         """
-        Calculate equilibration time at target temperature after high-temp phase.
+        Calculate equilibration time accounting for realistic water temperature change.
+        When bath setting changes, existing hot water mixes with cold water and needs time to reheat.
         
         Args:
             protein_type: Type of protein
@@ -376,27 +384,47 @@ class ThermodynamicCalculator:
             high_phase_time: Duration of high temperature phase in hours
             
         Returns:
-            Equilibration time in hours
+            Equilibration time in hours (including water reheating time)
         """
         # High-temp phase does 80% of cooking, equilibration completes remaining 20%
         full_cook_time = self.calculate_sous_vide_time(protein_type, thickness_inches, target_temp, weight_kg)
         
         if high_phase_time > 0:
-            # High-temp phase accomplished 80% of heating
-            # Equilibration must complete the remaining 20% at target temperature
+            # Calculate base equilibration time for remaining 20% of cooking
             remaining_cooking_fraction = 0.20
+            base_equilibration_time = full_cook_time * remaining_cooking_fraction
             
-            # Calculate time needed for final 20% of temperature rise at target temperature
-            # This is slower than high-temp phase but ensures perfect doneness
-            equilibration_time = full_cook_time * remaining_cooking_fraction
+            # Account for realistic water temperature change process:
+            # 1. Water mixing causes initial temperature drop
+            # 2. Heating element needs time to reheat water to target temp
+            # 3. During reheating, core heating is slower due to reduced temperature gradient
             
-            # Add safety margin for final equilibration
-            equilibration_time *= 1.2  # 20% extra time for final temperature uniformity
+            cold_water_temp = 20.0  # Cold water temperature (°C)
+            optimal_high_temp = target_temp + 8  # Estimate high temp used
+            water_mix_ratio = 0.5  # Assume 50% water replacement
+            
+            # Calculate mixed water temperature after cold water addition
+            mixed_temp = (optimal_high_temp * (1 - water_mix_ratio)) + (cold_water_temp * water_mix_ratio)
+            
+            # Time for water to reheat from mixed temp to target temp
+            # Typical sous vide circulator heating rate: ~3-5°C per minute for small baths
+            temp_rise_needed = target_temp - mixed_temp
+            water_reheat_time = max(0.1, temp_rise_needed / 180.0)  # 3°C/min = 180°C/hour
+            
+            # During water reheating, core heating is significantly slower
+            # Add extra time to account for reduced heating efficiency
+            thermal_efficiency_penalty = 1.5  # 50% longer due to variable bath temp
+            
+            # Total equilibration time = base time + water reheat time + efficiency penalty
+            equilibration_time = (base_equilibration_time * thermal_efficiency_penalty) + water_reheat_time
+            
+            # Add safety margin for final temperature uniformity
+            equilibration_time *= 1.1  # 10% extra time for final equilibration
         else:
             # No high-temp phase, do full cook time
             equilibration_time = full_cook_time
         
-        return max(0.2, equilibration_time)  # Minimum 12 minutes for final equilibration
+        return max(0.25, equilibration_time)  # Minimum 15 minutes for water reheating and equilibration
     
     def calculate_sous_vide_time(self, protein_type: str, thickness_inches: float,
                                 target_temp: float, weight_kg: float = None) -> float:

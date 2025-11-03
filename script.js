@@ -1063,20 +1063,42 @@ function updateGraph() {
         timePoints.push(Math.round(time));
         
         if (time <= highPhaseTime) {
-            // High temperature phase - Only 80% of cooking progress
+            // High temperature phase - accelerated heating
             bathTemps.push(highTemp);
             const progress = time / highPhaseTime;
-            // Core reaches only 80% of target temperature during high-temp phase
+            // Core approaches 80% of total temperature rise during high-temp phase
             const temp_rise_80_percent = (targetTemp - 25) * 0.80;
-            const high_phase_target = 25 + temp_rise_80_percent;
-            const coreTemp = 25 + temp_rise_80_percent * (1 - Math.exp(-progress * 2.5));
+            const coreTemp = 25 + temp_rise_80_percent * (1 - Math.exp(-progress * 3.0));
             coreTemps.push(Math.round(coreTemp * 10) / 10);
         } else {
-            // Equilibration phase - Complete remaining 20% of cooking
-            bathTemps.push(targetTemp);
+            // Water change phase - bath temp drops then reheats
             const equilibrationProgress = (time - highPhaseTime) / equilibrationTime;
-            const startTemp = 25 + (targetTemp - 25) * 0.80; // Start from 80% of target
-            const coreTemp = startTemp + (targetTemp - startTemp) * equilibrationProgress;
+            const coldWaterTemp = 20; // Cold water mixed in
+            const waterMixRatio = 0.5; // 50% water replacement
+            
+            // Bath temperature: drops to mix temp, then reheats to target
+            let bathTemp;
+            if (equilibrationProgress < 0.3) {
+                // Initial water mixing and reheating (first 30% of equilibration time)
+                const mixTemp = (highTemp * (1 - waterMixRatio)) + (coldWaterTemp * waterMixRatio);
+                const reheatProgress = equilibrationProgress / 0.3;
+                bathTemp = mixTemp + (targetTemp - mixTemp) * (1 - Math.exp(-reheatProgress * 4.0));
+            } else {
+                // Bath stabilized at target temp
+                bathTemp = targetTemp;
+            }
+            bathTemps.push(Math.round(bathTemp * 10) / 10);
+            
+            // Core temperature: continues heating but affected by bath temp changes
+            const temp_rise_80_percent = (targetTemp - 25) * 0.80;
+            const coreAtPhaseEnd = 25 + temp_rise_80_percent * (1 - Math.exp(-3.0));
+            
+            // Core heating rate depends on current bath temperature
+            const tempDifference = bathTemp - coreAtPhaseEnd;
+            const effectiveProgress = equilibrationProgress * (tempDifference / (targetTemp - coreAtPhaseEnd));
+            const remainingRise = targetTemp - coreAtPhaseEnd;
+            const coreTemp = coreAtPhaseEnd + remainingRise * (1 - Math.exp(-effectiveProgress * 1.5));
+            
             coreTemps.push(Math.round(coreTemp * 10) / 10);
         }
     }
