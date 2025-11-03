@@ -1,3 +1,79 @@
+// Firebase Configuration and Authentication
+let firebaseApp = null;
+let auth = null;
+let currentUser = null;
+
+// Initialize Firebase when DOM is ready
+document.addEventListener('DOMContentLoaded', async function() {
+    await initializeFirebase();
+});
+
+async function initializeFirebase() {
+    try {
+        // Get Firebase config from server
+        const response = await fetch('/api/auth/firebase-config');
+        const data = await response.json();
+        
+        if (data.success && data.config) {
+            // Initialize Firebase
+            firebaseApp = firebase.initializeApp(data.config);
+            auth = firebase.auth();
+            
+            // Set up auth state listener
+            auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    // User is signed in
+                    currentUser = user;
+                    await verifyAndUpdateUserProfile(user);
+                } else {
+                    // User is signed out
+                    currentUser = null;
+                    updateAuthUI(null, null);
+                }
+            });
+            
+            console.log('Firebase initialized successfully');
+        } else {
+            console.error('Failed to get Firebase config:', data.error);
+        }
+    } catch (error) {
+        console.error('Firebase initialization error:', error);
+    }
+}
+
+async function verifyAndUpdateUserProfile(user) {
+    try {
+        const idToken = await user.getIdToken();
+        
+        const response = await fetch('/api/auth/verify-token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ idToken })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update current plan based on subscription
+            if (data.subscription && data.subscription.has_access) {
+                currentPlan = 'pro';
+            } else {
+                currentPlan = 'free';
+            }
+            
+            // Update UI
+            updateAuthUI(data.user, data.subscription);
+        } else {
+            console.error('Token verification failed:', data.error);
+            await signOut();
+        }
+    } catch (error) {
+        console.error('Profile verification error:', error);
+    }
+}
+
 // Mobile navigation toggle
 const mobileMenu = document.getElementById('mobile-menu');
 const navMenu = document.querySelector('.nav-menu');
@@ -168,8 +244,12 @@ async function updateCalculationFallback() {
     const thermoData = thermoCalc.calculateOptimalProfile(proteinType, thickness, baseData.tempC);
     const equilibriumTime = thermoCalc.calculateEquilibriumTime(proteinType, thickness, baseData.tempC, 20);
     
-    // Adjust time based on thermodynamic calculations
-    const adjustedTime = Math.max(baseData.time, equilibriumTime * 1.1); // 10% safety margin
+    // Calculate realistic time based on thickness and weight (not hardcoded values)
+    let scaledTime = baseData.time * Math.pow(thickness / 1.0, 2); // Square law for thickness
+    if (weight > 0) {
+        scaledTime *= (1 + Math.log(weight / 0.5) * 0.3); // Weight scaling factor
+    }
+    const adjustedTime = Math.max(scaledTime, equilibriumTime * 1.1); // Use scaled time, not hardcoded
     
     // Store thermodynamic data for instructions
     window.currentThermoData = {
@@ -187,24 +267,46 @@ async function updateCalculationFallback() {
 
 // Fetch calculations from Python API
 async function fetchThermodynamicCalculation(proteinType, thicknessInches, targetTempC, doneness, weightKg) {
-    const apiUrl = 'http://localhost:5000/api/calculate';
+    const apiUrl = '/api/calculate';
     
-    const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            protein_type: proteinType,
-            thickness_inches: thicknessInches,
-            target_temp_celsius: targetTempC,
-            doneness: doneness,
-            weight_kg: weightKg
-        })
-    });
-    
-    if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({
+                protein_type: proteinType,
+                thickness_inches: thicknessInches,
+                target_temp_celsius: targetTempC,
+                doneness: doneness,
+                weight_kg: weightKg
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            // Handle authentication/authorization errors
+            if (response.status === 401 || response.status === 403) {
+                if (data.requires_upgrade) {
+                    // Show upgrade modal for premium protein
+                    showUpgradeModalForProtein(data.protein_type);
+                    throw new Error(`Pro Chef subscription required for ${data.protein_type}`);
+                } else {
+                    // Show login modal
+                    showLoginModal(proteinType);
+                    throw new Error('Authentication required');
+                }
+            }
+            throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
     }
     
     return await response.json();
@@ -531,7 +633,19 @@ function generateInstructions() {
     }
     
     const baseData = sousVideData[proteinType][doneness];
-    const adjustedTime = baseData.time * (thickness / 1);
+    
+    // Use actual calculated time from thermodynamic data if available
+    let adjustedTime;
+    if (window.currentThermoData && window.currentThermoData.totalTime) {
+        adjustedTime = window.currentThermoData.totalTime;
+    } else {
+        // Fallback: properly scale time based on thickness and weight (not just linear)
+        adjustedTime = baseData.time * Math.pow(thickness / 1.0, 2); // Square law for thickness
+        const weight = parseFloat(document.getElementById('weight').value);
+        if (weight > 0) {
+            adjustedTime *= (1 + Math.log(weight / 0.5) * 0.3); // Weight scaling factor
+        }
+    }
     
     // Update summary
     updateInstructionSummary(proteinType, thickness, doneness, baseData, adjustedTime);
@@ -1151,8 +1265,515 @@ function getTargetTemp(protein) {
     return temps[protein] || 54;
 }
 
-// Initialize graphs when page loads
+// Protein Selection Functions
+function selectProtein(proteinType) {
+    // Check if this is a premium protein and user doesn't have access
+    if (currentPlan === 'free' && !pricingPlans.free.allowedProteins.includes(proteinType)) {
+        // Show login modal for locked proteins
+        showLoginModal(proteinType);
+        return;
+    }
+    
+    // Update all protein buttons
+    document.querySelectorAll('.protein-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Activate selected button
+    document.querySelector(`.protein-btn[data-protein="${proteinType}"]`).classList.add('active');
+    
+    // Update hidden input for compatibility
+    document.getElementById('protein-type').value = proteinType;
+    
+    // Trigger calculation update
+    updateCalculation();
+}
+
+function selectTheoryProtein(proteinType) {
+    // Update theory protein buttons
+    document.querySelectorAll('.theory-protein-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Activate selected button
+    document.querySelector(`.theory-protein-btn[data-protein="${proteinType}"]`).classList.add('active');
+    
+    // Update hidden select for compatibility
+    document.getElementById('proteinSelect').value = proteinType;
+    
+    // Trigger graph update
+    updateGraph();
+}
+
+// Login Modal Functions
+function showLoginModal(proteinType = null) {
+    const modal = document.getElementById('loginModal');
+    modal.classList.add('show');
+    modal.style.display = 'flex';
+    
+    // Update modal title based on context
+    if (proteinType) {
+        const proteinNames = {
+            chicken: 'Chicken',
+            pork: 'Pork', 
+            fish: 'Fish',
+            vegetables: 'Vegetables'
+        };
+        document.getElementById('modalTitle').textContent = `Unlock ${proteinNames[proteinType]} Calculations`;
+    }
+    
+    // Store the requested protein for after login
+    window.pendingProteinSelection = proteinType;
+}
+
+function closeLoginModal() {
+    const modal = document.getElementById('loginModal');
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.style.display = 'none';
+    }, 300);
+}
+
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`.tab-btn[onclick="switchTab('${tabName}')"]`).classList.add('active');
+    
+    // Show corresponding form
+    document.querySelectorAll('.auth-form').forEach(form => {
+        form.classList.remove('active');
+    });
+    
+    if (tabName === 'login') {
+        document.getElementById('loginForm').classList.add('active');
+    } else if (tabName === 'signup') {
+        document.getElementById('signupForm').classList.add('active');
+    }
+}
+
+function showForgotPassword() {
+    document.querySelectorAll('.auth-form').forEach(form => {
+        form.classList.remove('active');
+    });
+    document.getElementById('forgotForm').classList.add('active');
+    
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+}
+
+async function handleLogin(event) {
+    event.preventDefault();
+    
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    
+    if (!email || !password) {
+        showErrorMessage('Please enter both email and password');
+        return;
+    }
+    
+    showLoading('Signing you in...');
+    
+    try {
+        if (!auth) {
+            throw new Error('Firebase not initialized');
+        }
+        
+        // Sign in with Firebase
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        const user = userCredential.user;
+        
+        hideLoading();
+        showSuccessMessage(`Welcome back, ${user.displayName || 'Pro Chef'}! Features unlocked.`);
+        
+        // Close modal
+        closeLoginModal();
+        
+        // If there was a pending protein selection, activate it
+        if (window.pendingProteinSelection) {
+            selectProtein(window.pendingProteinSelection);
+            window.pendingProteinSelection = null;
+        }
+        
+        // Auth state change will handle UI updates automatically
+        
+    } catch (error) {
+        hideLoading();
+        
+        let errorMessage = 'Login failed';
+        switch (error.code) {
+            case 'auth/user-not-found':
+                errorMessage = 'No account found with this email';
+                break;
+            case 'auth/wrong-password':
+                errorMessage = 'Incorrect password';
+                break;
+            case 'auth/invalid-email':
+                errorMessage = 'Invalid email address';
+                break;
+            case 'auth/too-many-requests':
+                errorMessage = 'Too many failed attempts. Please try again later';
+                break;
+            default:
+                errorMessage = error.message || 'Login failed';
+        }
+        
+        showErrorMessage(errorMessage);
+        console.error('Login error:', error);
+    }
+}
+
+async function handleSignup(event) {
+    event.preventDefault();
+    
+    const name = document.getElementById('signupName').value;
+    const email = document.getElementById('signupEmail').value;
+    const password = document.getElementById('signupPassword').value;
+    const confirm = document.getElementById('signupConfirm').value;
+    
+    if (!name || !email || !password || !confirm) {
+        showErrorMessage('Please fill in all fields');
+        return;
+    }
+    
+    if (password !== confirm) {
+        showErrorMessage('Passwords do not match');
+        return;
+    }
+    
+    if (password.length < 6) {
+        showErrorMessage('Password must be at least 6 characters');
+        return;
+    }
+    
+    showLoading('Creating your account...');
+    
+    try {
+        if (!auth) {
+            throw new Error('Firebase not initialized');
+        }
+        
+        // Create user with Firebase
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        const user = userCredential.user;
+        
+        // Update user profile with display name
+        await user.updateProfile({
+            displayName: name
+        });
+        
+        hideLoading();
+        showSuccessMessage(`Welcome to SousSpeed, ${name}! Your account has been created.`);
+        
+        // Close modal and show upgrade option
+        closeLoginModal();
+        setTimeout(() => {
+            showUpgradeModal();
+        }, 1000);
+        
+        // Auth state change will handle UI updates automatically
+        
+    } catch (error) {
+        hideLoading();
+        
+        let errorMessage = 'Account creation failed';
+        switch (error.code) {
+            case 'auth/email-already-in-use':
+                errorMessage = 'An account with this email already exists';
+                break;
+            case 'auth/invalid-email':
+                errorMessage = 'Invalid email address';
+                break;
+            case 'auth/weak-password':
+                errorMessage = 'Password is too weak';
+                break;
+            default:
+                errorMessage = error.message || 'Account creation failed';
+        }
+        
+        showErrorMessage(errorMessage);
+        console.error('Signup error:', error);
+    }
+}
+
+async function handleForgotPassword(event) {
+    event.preventDefault();
+    
+    const email = document.getElementById('forgotEmail').value;
+    
+    if (!email) {
+        showErrorMessage('Please enter your email address');
+        return;
+    }
+    
+    showLoading('Sending reset link...');
+    
+    try {
+        if (!auth) {
+            throw new Error('Firebase not initialized');
+        }
+        
+        await auth.sendPasswordResetEmail(email);
+        
+        hideLoading();
+        showSuccessMessage('Password reset link sent to your email');
+        switchTab('login');
+        
+    } catch (error) {
+        hideLoading();
+        
+        let errorMessage = 'Failed to send reset email';
+        switch (error.code) {
+            case 'auth/user-not-found':
+                errorMessage = 'No account found with this email address';
+                break;
+            case 'auth/invalid-email':
+                errorMessage = 'Invalid email address';
+                break;
+            default:
+                errorMessage = error.message || 'Failed to send reset email';
+        }
+        
+        showErrorMessage(errorMessage);
+        console.error('Password reset error:', error);
+    }
+}
+
+function updateAuthUI(user, subscription) {
+    // Update plan status
+    if (subscription && subscription.has_access) {
+        currentPlan = 'pro';
+        updatePlanUI();
+    } else {
+        currentPlan = 'free';
+    }
+    
+    // Update navigation or add logout option
+    // This can be expanded to show user name, logout button, etc.
+}
+
+function updatePlanUI() {
+    // Update all protein buttons to remove pro-feature class
+    if (currentPlan === 'pro') {
+        document.querySelectorAll('.protein-btn.pro-feature').forEach(btn => {
+            btn.classList.remove('pro-feature');
+            const small = btn.querySelector('small');
+            if (small) {
+                small.textContent = 'Pro Chef ✓';
+                small.style.color = '#059669';
+            }
+        });
+    }
+}
+
+async function getAuthHeaders() {
+    if (currentUser) {
+        try {
+            const idToken = await currentUser.getIdToken();
+            return { 'Authorization': `Bearer ${idToken}` };
+        } catch (error) {
+            console.error('Error getting ID token:', error);
+        }
+    }
+    return {};
+}
+
+function isAuthenticated() {
+    return !!currentUser;
+}
+
+async function signOut() {
+    try {
+        if (auth) {
+            await auth.signOut();
+        }
+        currentUser = null;
+        currentPlan = 'free';
+        
+        // Clear any cached data
+        localStorage.removeItem('user_data');
+        
+        // Update UI
+        updateAuthUI(null, null);
+        
+    } catch (error) {
+        console.error('Sign out error:', error);
+    }
+}
+
+async function showUpgradeModal() {
+    // Create upgrade modal for new users
+    if (isAuthenticated()) {
+        try {
+            const authHeaders = await getAuthHeaders();
+            const response = await fetch('/api/payment/create-checkout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...authHeaders
+                },
+                body: JSON.stringify({
+                    plan_type: 'pro_chef',
+                    trial_days: 7
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                // Redirect to Stripe Checkout
+                window.location.href = data.checkout_url;
+            } else {
+                showErrorMessage('Failed to create checkout session');
+            }
+        } catch (error) {
+            showErrorMessage('Network error during checkout');
+            console.error('Checkout error:', error);
+        }
+    } else {
+        showLoginModal();
+    }
+}
+
+function showLoading(message) {
+    // Create or update loading overlay
+    let overlay = document.getElementById('loadingOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loadingOverlay';
+        overlay.innerHTML = `
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <p id="loadingMessage">${message}</p>
+            </div>
+        `;
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            color: white;
+            text-align: center;
+        `;
+        
+        const style = document.createElement('style');
+        style.textContent = `
+            .loading-content { text-align: center; }
+            .spinner { 
+                border: 3px solid rgba(255,255,255,0.3);
+                border-top: 3px solid white;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 1rem;
+            }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        `;
+        document.head.appendChild(style);
+        
+        document.body.appendChild(overlay);
+    } else {
+        document.getElementById('loadingMessage').textContent = message;
+        overlay.style.display = 'flex';
+    }
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+function showSuccessMessage(message) {
+    showNotification(message, 'success');
+}
+
+function showErrorMessage(message) {
+    showNotification(message, 'error');
+}
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 4000;
+        animation: slideInRight 0.3s ease;
+        max-width: 300px;
+        ${type === 'success' ? 'background: linear-gradient(135deg, #10b981, #059669);' : 'background: linear-gradient(135deg, #ef4444, #dc2626);'}
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('loginModal');
+    if (event.target === modal) {
+        closeLoginModal();
+    }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeLoginModal();
+    }
+});
+
+function showUpgradeModalForProtein(proteinType) {
+    const proteinNames = {
+        chicken: 'Chicken',
+        pork: 'Pork', 
+        fish: 'Fish',
+        vegetables: 'Vegetables'
+    };
+    
+    const upgradeMessage = `${proteinNames[proteinType]} calculations require Pro Chef subscription. Would you like to upgrade?`;
+    
+    if (confirm(upgradeMessage)) {
+        if (isAuthenticated()) {
+            showUpgradeModal();
+        } else {
+            showLoginModal(proteinType);
+        }
+    }
+}
+
+// Initialize authentication state on page load
 document.addEventListener('DOMContentLoaded', function() {
+    // Clear any old authentication data
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_data');
+    
+    // Firebase initialization will handle auth state
+    console.log('Page loaded, Firebase auth will handle authentication state');
+    
     // Delay initialization to ensure Chart.js is loaded
     setTimeout(initializeGraphs, 500);
 });
